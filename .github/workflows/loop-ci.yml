@@ -1,0 +1,53 @@
+name: Loop CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: read
+  issues: read
+  checks: read
+
+jobs:
+  harness:
+    name: Harness syntax
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Check shell scripts
+        run: |
+          bash -n scripts/loop/create-worktree.sh
+          bash -n scripts/loop/verify.sh
+      - name: Check Node scripts
+        run: |
+          node --check scripts/loop/ledger.mjs
+          node --check scripts/loop/greptile-gate.mjs
+
+  verify:
+    name: Bonfire verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+      - name: Run full verification when app scaffold exists
+        run: |
+          if [ ! -f package.json ]; then
+            echo "package.json missing; harness-only phase, skipping app verify"
+            exit 0
+          fi
+          scripts/loop/verify.sh
+
+  greptile:
+    name: Greptile 5/5 gate
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Require Greptile score
+        run: node scripts/loop/greptile-gate.mjs
