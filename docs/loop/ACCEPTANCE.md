@@ -84,3 +84,10 @@ No PR may merge unless the latest Greptile review for that PR reports `5/5`.
 If Greptile exposes a required GitHub check, branch protection should require
 that check. If Greptile reports by comment or review body, the fallback
 `scripts/loop/greptile-gate.mjs` parser is the merge gate.
+
+The fallback gate must distinguish reviewer absence from reviewer failure:
+
+- poll boundedly when no Greptile artifact is visible yet;
+- inspect both pull-request merge SHA and head SHA check runs;
+- fail immediately when a visible score is below `5/5`;
+- fail with diagnostics when the wait window expires without readable output.

@@ -70,6 +70,43 @@ scripts/loop/task.mjs next
 Then read only the relevant task contract and impacted files. Keep context
 small; avoid loading the entire repo into the model.
 
+For long autonomous runs, apply `docs/loop/AUTONOMY.md` before starting the
+maker agent. It documents the Codex/Claude Code permissions that prevent routine
+Bun, Docker, GitHub, and localhost smoke checks from turning into repeated
+approval stops.
+
+## Failure Triage
+
+Do not patch CI failures blindly. First classify the failure:
+
+- Deterministic failures, such as syntax, typecheck, lint, unit tests, Docker
+  build, or API smoke, require root-cause investigation and a targeted fix.
+- Eventual failures, such as reviewer output not being available yet or service
+  health races, require bounded polling/retry plus diagnostics.
+- Blocked failures, such as missing credentials, missing reviewer app
+  installation, forbidden file scope, or two repeated failures of the same
+  command, require a clear stop report.
+
+Harness changes are allowed when they are tied to a concrete failure and add
+one of: a local verifier check, a bounded retry, or a runbook entry for the
+human action.
+
+## External Reviewer Gates
+
+Greptile is asynchronous. The loop gate must wait for review output before
+failing for absence, but it must still fail immediately when a visible Greptile
+score is below `5/5`.
+
+The fallback parser checks PR comments, PR reviews, and check runs on both the
+workflow event SHA and the PR head SHA:
+
+```bash
+node scripts/loop/greptile-gate.mjs --wait-seconds 900 --poll-seconds 30
+```
+
+If no Greptile output is visible after the wait, treat it as a blocked external
+review setup problem, not a BF task implementation failure.
+
 ## Stop Conditions
 
 Stop and report instead of continuing when:
@@ -78,7 +115,7 @@ Stop and report instead of continuing when:
 - `MAX ATTEMPTS`, `MAX TURNS`, or `MAX BUDGET USD` is reached.
 - The task needs a product decision not covered by the slice contract.
 - A security auditor returns `BLOCKING`.
-- Greptile cannot be read from GitHub after the PR is ready for review.
+- Greptile cannot be read from GitHub after the configured wait window.
 - A task requires files outside its `allowedPaths`; stop and update the task
   contract in a separate harness PR.
 

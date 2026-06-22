@@ -37,6 +37,13 @@ require_cmd docker
 echo "verify: task registry"
 node scripts/loop/task.mjs validate
 
+echo "verify: harness syntax"
+bash -n scripts/loop/*.sh
+node --check scripts/loop/*.mjs
+
+echo "verify: harness tests"
+node --test scripts/loop/*.test.mjs
+
 for script in typecheck lint test smoke:demo smoke:offline scan:synthetic-only; do
   require_script "$script"
 done

@@ -109,3 +109,24 @@ do not target PostgreSQL 19 beta for the demo.
 When a loop fails, record the failure in `task-status.json` and `STATE.md`.
 Harness changes are accepted only when they are tied to a concrete failure and
 the harness syntax/registry checks still pass.
+
+### 9. Classify Failures Before Retrying
+
+The BF-01 PR exposed a harness failure: the Greptile gate treated missing
+external reviewer output as an immediate implementation failure. That is wrong
+for asynchronous reviewer systems. The harness now separates:
+
+- deterministic failures that should fail fast and be fixed at root cause;
+- eventual failures that should receive bounded polling with diagnostics;
+- blocked failures that should stop only after the wait budget or retry budget
+  is exhausted.
+
+Bonfire implementation:
+
+- `scripts/loop/greptile-gate.mjs` polls for missing Greptile artifacts when
+  configured with `--wait-seconds`.
+- The gate inspects both GitHub's pull-request event SHA and the PR head SHA.
+- The gate has unit tests covering pass, sub-5 failure, no output, incomplete
+  output, check-run body extraction, and SHA selection.
+- `scripts/loop/verify.sh` runs the harness syntax and unit tests locally before
+  app verification.

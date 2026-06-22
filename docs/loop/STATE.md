@@ -28,3 +28,4 @@ _last run: never_
 
 | date | key | attempt | failure | next action |
 |------|-----|---------|---------|-------------|
+| 2026-06-22 | BF-01-ci-greptile-pending | 1 | Greptile 5/5 gate failed immediately because no Greptile PR comment, review, or check output existed yet; Bonfire verify and harness syntax passed. | Add bounded Greptile polling, inspect both PR merge and head SHAs, and run harness tests locally/CI. |

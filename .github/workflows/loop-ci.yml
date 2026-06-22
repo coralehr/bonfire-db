@@ -18,14 +18,11 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Check shell scripts
-        run: |
-          bash -n scripts/loop/create-worktree.sh
-          bash -n scripts/loop/verify.sh
+        run: bash -n scripts/loop/*.sh
       - name: Check Node scripts
-        run: |
-          node --check scripts/loop/ledger.mjs
-          node --check scripts/loop/greptile-gate.mjs
-          node --check scripts/loop/task.mjs
+        run: node --check scripts/loop/*.mjs
+      - name: Test harness scripts
+        run: node --test scripts/loop/*.test.mjs
       - name: Validate task registry
         run: node scripts/loop/task.mjs validate
 
@@ -53,4 +50,4 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Require Greptile score
-        run: node scripts/loop/greptile-gate.mjs
+        run: node scripts/loop/greptile-gate.mjs --wait-seconds 900 --poll-seconds 30
