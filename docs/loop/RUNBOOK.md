@@ -118,6 +118,9 @@ Configure one Greptile trigger path when Greptile exposes it:
 When a Greptile summary says which commit it reviewed, the gate rejects stale
 summaries that do not match the current PR head or merge SHA.
 
+Harness-authored trigger comments are marked and ignored as review output, so
+`@greptileai` trigger comments cannot mask a missing scored Greptile summary.
+
 CI runs the trigger with `--trigger-required true`, so a GitHub permission error
 while posting the bot-command comment fails immediately instead of waiting for
 the full poll window.

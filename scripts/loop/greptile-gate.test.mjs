@@ -11,6 +11,7 @@ import {
   extractScores,
   formatCheckRunDiagnostics,
   hasTriggerComment,
+  isHarnessTriggerBody,
   renderTriggerComment,
   resolveTriggerOptions,
   shasToInspect,
@@ -86,6 +87,21 @@ test("bodiesFrom includes Greptile check run output title, summary, and text", (
   assert.match(bodies[0].body, /Review complete/);
   assert.match(bodies[0].body, /Score: 5\/5/);
   assert.match(bodies[0].body, /No blocking issues/);
+});
+
+test("bodiesFrom ignores harness trigger comments", () => {
+  const marker = triggerMarker({ headSha: "head-sha" });
+  const bodies = bodiesFrom([
+    {
+      user: { login: "maintainer" },
+      created_at: "2026-06-22T00:00:00Z",
+      body: `@greptileai\n\n${marker}`,
+      html_url: "comment",
+    },
+  ]);
+
+  assert.equal(isHarnessTriggerBody(`@greptileai\n\n${marker}`), true);
+  assert.deepEqual(bodies, []);
 });
 
 test("extractReviewedShas finds Greptile review footer commit links", () => {

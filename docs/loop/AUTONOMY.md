@@ -109,6 +109,9 @@ When a Greptile summary includes a reviewed commit link, the gate only accepts
 that summary if it matches the current PR head or merge SHA. This prevents an
 old `5/5` review from passing a newer commit.
 
+Harness-authored trigger comments include an idempotency marker and are ignored
+as review candidates, even though they mention `@greptileai`.
+
 CI uses `--trigger-required true` so a GitHub permission error while posting the
 bot-command comment fails immediately with setup evidence instead of burning the
 full wait window.

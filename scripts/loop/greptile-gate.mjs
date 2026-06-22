@@ -59,12 +59,17 @@ export function extractReviewedShas(body) {
     .map((match) => match[1]);
 }
 
+export function isHarnessTriggerBody(body) {
+  return String(body || "").includes("bonfire-greptile-trigger:");
+}
+
 export function bodiesFrom(items) {
   return items
     .filter((item) => {
       const login = item.user?.login || item.app?.slug || "";
       const name = item.name || "";
       const body = item.body || checkRunText(item);
+      if (isHarnessTriggerBody(body)) return false;
       return /greptile/i.test(login) || /greptile/i.test(name) || /greptile/i.test(body);
     })
     .map((item) => {
