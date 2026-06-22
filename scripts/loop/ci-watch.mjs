@@ -158,16 +158,25 @@ export function isPendingLogError(error) {
   return /still in progress|logs will be available/i.test(String(error?.message || error));
 }
 
+export function isNoChecksError(error) {
+  return /no checks reported/i.test(String(error?.message || error));
+}
+
 function fetchChecks({ repo, pr }) {
-  return ghJson([
-    "pr",
-    "checks",
-    String(pr),
-    "--repo",
-    repo,
-    "--json",
-    "name,state,bucket,link,workflow",
-  ]);
+  try {
+    return ghJson([
+      "pr",
+      "checks",
+      String(pr),
+      "--repo",
+      repo,
+      "--json",
+      "name,state,bucket,link,workflow",
+    ]);
+  } catch (error) {
+    if (isNoChecksError(error)) return [];
+    throw error;
+  }
 }
 
 function fetchActionLog({ repo, link }) {

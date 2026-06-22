@@ -6,6 +6,7 @@ import {
   evaluateChecks,
   extractFailureSnippets,
   formatCheck,
+  isNoChecksError,
   isPendingLogError,
   normalizeCheckBucket,
 } from "./ci-watch.mjs";
@@ -97,4 +98,9 @@ test("isPendingLogError detects GitHub Actions log availability races", () => {
     true,
   );
   assert.equal(isPendingLogError(new Error("HTTP 404")), false);
+});
+
+test("isNoChecksError detects GitHub checks creation races", () => {
+  assert.equal(isNoChecksError(new Error("no checks reported on the 'loop/BF-01' branch")), true);
+  assert.equal(isNoChecksError(new Error("HTTP 500")), false);
 });
