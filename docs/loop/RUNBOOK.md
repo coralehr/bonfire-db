@@ -109,14 +109,21 @@ failing for absence, but it must still fail immediately when a visible Greptile
 score is below `5/5`.
 
 Draft PRs skip the Greptile gate. Marking the PR ready for review triggers the
-strict Greptile `5/5` gate.
+Greptile score gate.
 
 The fallback parser checks PR comments, PR reviews, and check runs on both the
 workflow event SHA and the PR head SHA:
 
 ```bash
-node scripts/loop/greptile-gate.mjs --trigger --wait-seconds 900 --poll-seconds 30
+node scripts/loop/greptile-gate.mjs --wait-seconds 1200 --poll-seconds 30
 ```
+
+Temporary CI behavior while Greptile setup is being stabilized: CI waits up to
+`GREPTILE_WAIT_SECONDS` seconds, defaulting to 1200, and fails when a visible
+Greptile score is below `5/5`. A missing Greptile artifact soft-passes after the
+wait window with diagnostics. Set repository variable `GREPTILE_PENDING_EXIT_CODE=1`
+after Greptile reliably reviews new commits to restore strict missing-review
+failures.
 
 Configure one Greptile trigger path when Greptile exposes it:
 
@@ -132,18 +139,19 @@ summaries that do not match the current PR head or merge SHA.
 Harness-authored trigger comments are marked and ignored as review output, so
 `@greptileai` trigger comments cannot mask a missing scored Greptile summary.
 
-CI attempts the configured trigger before polling. Set
-`GREPTILE_TRIGGER_REQUIRED=true` only when a real trigger URL, trigger token, or
-comment-capable token is configured; otherwise the gate should continue polling
-for normal Greptile app output after a trigger failure.
+CI only attempts a trigger when `GREPTILE_TRIGGER_URL` or
+`GREPTILE_TRIGGER_COMMENT` is configured. Set `GREPTILE_TRIGGER_REQUIRED=true`
+only when that trigger path is known to work.
 
 If the organization blocks write permissions for the default `GITHUB_TOKEN`, set
 `GREPTILE_GH_TOKEN` to a fine-grained token that can read pull requests/checks
 and write PR comments for this repository. The workflow uses that secret when it
 exists and falls back to `github.token` otherwise.
 
-If no Greptile output is visible after the wait, treat it as a blocked external
-review setup problem, not a BF task implementation failure.
+If no Greptile output is visible after the wait, check the Greptile dashboard
+repository enablement, filters, indexing status, and GitHub webhook deliveries.
+Treat persistent absence as a blocked external review setup problem, not a BF
+task implementation failure.
 
 ## Stop Conditions
 
@@ -153,7 +161,8 @@ Stop and report instead of continuing when:
 - `MAX ATTEMPTS`, `MAX TURNS`, or `MAX BUDGET USD` is reached.
 - The task needs a product decision not covered by the slice contract.
 - A security auditor returns `BLOCKING`.
-- Greptile cannot be read from GitHub after the configured wait window.
+- Greptile cannot be read from GitHub persistently after the configured wait
+  window and strict pending failure is enabled.
 - A task requires files outside its `allowedPaths`; stop and update the task
   contract in a separate harness PR.
 

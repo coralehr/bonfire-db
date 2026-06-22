@@ -11,6 +11,7 @@ import {
   extractScores,
   formatCheckRunDiagnostics,
   hasTriggerComment,
+  isAwaitingGreptile,
   isHarnessTriggerBody,
   renderTriggerComment,
   resolveTriggerOptions,
@@ -66,6 +67,13 @@ test("evaluateGreptile treats Greptile output without a score as incomplete", ()
   ]);
 
   assert.equal(outcome.status, "incomplete");
+});
+
+test("isAwaitingGreptile covers missing and unscored review states", () => {
+  assert.equal(isAwaitingGreptile({ status: "pending" }), true);
+  assert.equal(isAwaitingGreptile({ status: "incomplete" }), true);
+  assert.equal(isAwaitingGreptile({ status: "pass" }), false);
+  assert.equal(isAwaitingGreptile({ status: "fail" }), false);
 });
 
 test("evaluateGreptile uses the latest scored candidate", () => {
@@ -176,6 +184,15 @@ test("candidatesForShas drops stale scored reviews for older commits", () => {
 });
 
 test("resolveTriggerOptions keeps URL and comment triggers independent", () => {
+  assert.deepEqual(resolveTriggerOptions({
+    triggerFlag: false,
+    triggerUrl: "",
+    explicitTriggerComment: "",
+  }), {
+    triggerRequested: false,
+    triggerComment: "",
+  });
+
   assert.deepEqual(resolveTriggerOptions({
     triggerFlag: true,
     triggerUrl: "",

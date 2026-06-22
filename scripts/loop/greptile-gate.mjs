@@ -144,6 +144,10 @@ export function evaluateGreptile(candidates) {
   };
 }
 
+export function isAwaitingGreptile(outcome) {
+  return ["pending", "incomplete"].includes(outcome.status);
+}
+
 export function candidatesForShas(candidates, shas) {
   const acceptable = new Set(shas.filter(Boolean));
   return candidates.filter((candidate) => {
@@ -327,7 +331,7 @@ function fetchSnapshot({ repo, pr, explicitSha }) {
 }
 
 function canRetry({ outcome, startedAt, waitSeconds }) {
-  if (!["pending", "incomplete"].includes(outcome.status)) return false;
+  if (!isAwaitingGreptile(outcome)) return false;
   if (waitSeconds <= 0) return false;
   return Date.now() - startedAt < waitSeconds * 1000;
 }
@@ -417,7 +421,7 @@ async function run() {
       break;
     }
 
-    if (triggerRequested && !triggerAttempted && ["pending", "incomplete"].includes(lastOutcome.status)) {
+    if (triggerRequested && !triggerAttempted && isAwaitingGreptile(lastOutcome)) {
       triggerAttempted = true;
       try {
         const messages = await triggerGreptile({
@@ -447,13 +451,17 @@ async function run() {
 
   console.error(`greptile-gate: ${lastOutcome.message}`);
   if (lastOutcome.source) console.error(`greptile-gate: source ${lastOutcome.source}`);
-  if (lastOutcome.status === "pending") {
+  if (isAwaitingGreptile(lastOutcome)) {
     if (lastSnapshot.draft) {
       console.error("greptile-gate: draft PR detected; mark the PR ready for review to require Greptile 5/5");
     }
     console.error(`greptile-gate: inspected shas ${lastSnapshot.shas.join(", ") || "none"}`);
     console.error("greptile-gate: visible check runs:");
     console.error(formatCheckRunDiagnostics(lastSnapshot.checkRuns));
+    if (pendingExitCode === 0) {
+      console.log("greptile-gate: SOFT PASS - no scored Greptile review was visible before timeout");
+      console.log("greptile-gate: restore strict missing-review failures with GREPTILE_PENDING_EXIT_CODE=1");
+    }
     return pendingExitCode;
   }
 

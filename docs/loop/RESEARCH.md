@@ -131,6 +131,17 @@ Bonfire implementation:
 - Ready PRs call an opt-in Greptile trigger hook before polling. The hook can
   POST to a configured URL or post a configured bot-command comment once per
   head SHA.
+- Official Greptile docs say reviews normally post in about three minutes,
+  manual review is triggered by commenting `@greptileai`, and no-review failures
+  should be debugged via repository enablement, filters, draft settings,
+  webhook deliveries, and indexing status.
+- On PR #1, Greptile eventually posted a 5/5 review for head `5059ffa`, but only
+  after the 15-minute CI gate had timed out. CI now defaults to a configurable
+  20-minute wait via `GREPTILE_WAIT_SECONDS=1200`.
+- Until Greptile is reliably producing reviews on new commits inside that wait
+  window, CI soft-passes missing Greptile output after timeout but still fails
+  visible sub-5 scores. Restore strict missing-review failure with
+  `GREPTILE_PENDING_EXIT_CODE=1`.
 - `scripts/loop/ci-watch.mjs` polls PR checks after each push and extracts
   relevant GitHub Actions failure lines so the next repair loop starts from
   concrete evidence.

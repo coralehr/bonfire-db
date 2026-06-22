@@ -80,7 +80,8 @@ The full Bonfire demo is done only when all of these pass:
 
 ## Greptile Gate
 
-No PR may merge unless the latest Greptile review for that PR reports `5/5`.
+Normal target: no PR may merge unless the latest Greptile review for that PR
+reports `5/5`.
 If Greptile exposes a required GitHub check, branch protection should require
 that check. If Greptile reports by comment or review body, the fallback
 `scripts/loop/greptile-gate.mjs` parser is the merge gate.
@@ -93,3 +94,8 @@ The fallback gate must distinguish reviewer absence from reviewer failure:
 - inspect both pull-request merge SHA and head SHA check runs;
 - fail immediately when a visible score is below `5/5`;
 - fail with diagnostics when the wait window expires without readable output.
+
+Temporary setup-stabilization exception: CI may soft-pass absent or unscored
+Greptile output with `GREPTILE_PENDING_EXIT_CODE=0`, but a visible score below
+`5/5` must still fail. Restore strict missing-review failure by setting
+`GREPTILE_PENDING_EXIT_CODE=1` after Greptile reliably reviews new commits.

@@ -21,7 +21,7 @@ approvals_reviewer = "auto_review"
 [sandbox_workspace_write]
 network_access = true
 writable_roots = [
-  "/Users/dhruvjalan/DEV/cstack/bonfire-db",
+  "<absolute-path-to-bonfire-db>",
   "/private/tmp"
 ]
 ```
@@ -92,19 +92,27 @@ patient about availability:
 - `<5/5`: fail immediately.
 - no Greptile artifact yet: poll until the configured wait expires.
 - Greptile artifact without an `N/5` score: poll until the configured wait
-  expires, then fail with the source.
+  expires, then apply the configured pending exit policy with source
+  diagnostics.
 - inspect both the workflow event SHA and the PR head SHA, because pull request
   workflows often run on a merge SHA while reviewer apps attach checks to the
   head SHA.
 
-CI currently waits up to 15 minutes:
+CI currently waits up to 20 minutes by default:
 
 ```bash
-node scripts/loop/greptile-gate.mjs --trigger --wait-seconds 900 --poll-seconds 30
+node scripts/loop/greptile-gate.mjs --wait-seconds "${GREPTILE_WAIT_SECONDS:-1200}" --poll-seconds 30
 ```
 
+During the Greptile setup-stabilization period, CI uses
+`GREPTILE_PENDING_EXIT_CODE=0`: a visible sub-5 score still fails, but missing
+Greptile output soft-passes after the wait window. Set repository variable
+`GREPTILE_PENDING_EXIT_CODE=1` once Greptile reliably reviews new commits.
+Set `GREPTILE_WAIT_SECONDS` if the Greptile dashboard shows consistently faster
+or slower review times.
+
 Draft PRs intentionally skip the Greptile CI job. When the PR is marked ready
-for review, the `ready_for_review` workflow event runs the strict `5/5` gate.
+for review, the `ready_for_review` workflow event runs the Greptile score gate.
 
 The trigger step is opt-in and supports two automation paths:
 
@@ -124,11 +132,9 @@ old `5/5` review from passing a newer commit.
 Harness-authored trigger comments include an idempotency marker and are ignored
 as review candidates, even though they mention `@greptileai`.
 
-CI attempts the Greptile trigger before polling. Keep
-`GREPTILE_TRIGGER_REQUIRED=false` unless the repo has a working
-`GREPTILE_TRIGGER_URL` or a comment-capable `GREPTILE_GH_TOKEN`; otherwise a
-default `GITHUB_TOKEN` comment failure should not prevent polling for normal
-Greptile app output.
+CI attempts the Greptile trigger only when `GREPTILE_TRIGGER_URL` or
+`GREPTILE_TRIGGER_COMMENT` is configured. Keep `GREPTILE_TRIGGER_REQUIRED=false`
+unless that configured trigger path is known to work.
 
 When org policy blocks write permissions for the default `GITHUB_TOKEN`,
 configure `GREPTILE_GH_TOKEN` with a fine-grained token that can read

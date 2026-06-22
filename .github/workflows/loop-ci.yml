@@ -42,7 +42,7 @@ jobs:
           scripts/loop/verify.sh
 
   greptile:
-    name: Greptile 5/5 gate
+    name: Greptile review gate
     if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     permissions:
@@ -55,9 +55,11 @@ jobs:
       PR_NUMBER: ${{ github.event.pull_request.number }}
       GREPTILE_TRIGGER_URL: ${{ secrets.GREPTILE_TRIGGER_URL }}
       GREPTILE_TRIGGER_TOKEN: ${{ secrets.GREPTILE_TRIGGER_TOKEN }}
-      GREPTILE_TRIGGER_COMMENT: ${{ secrets.GREPTILE_TRIGGER_COMMENT }}
-      GREPTILE_TRIGGER_REQUIRED: ${{ vars.GREPTILE_TRIGGER_REQUIRED }}
+      GREPTILE_TRIGGER_COMMENT: ${{ secrets.GREPTILE_TRIGGER_COMMENT || vars.GREPTILE_TRIGGER_COMMENT }}
+      GREPTILE_TRIGGER_REQUIRED: ${{ vars.GREPTILE_TRIGGER_REQUIRED || 'false' }}
+      GREPTILE_PENDING_EXIT_CODE: ${{ vars.GREPTILE_PENDING_EXIT_CODE || '0' }}
+      GREPTILE_WAIT_SECONDS: ${{ vars.GREPTILE_WAIT_SECONDS || '1200' }}
     steps:
       - uses: actions/checkout@v5
-      - name: Require Greptile score
-        run: node scripts/loop/greptile-gate.mjs --trigger --wait-seconds 900 --poll-seconds 30
+      - name: Check Greptile score
+        run: node scripts/loop/greptile-gate.mjs --wait-seconds "${GREPTILE_WAIT_SECONDS}" --poll-seconds 30 --pending-exit-code "${GREPTILE_PENDING_EXIT_CODE}"
