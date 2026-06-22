@@ -70,6 +70,89 @@ scripts/loop/task.mjs next
 Then read only the relevant task contract and impacted files. Keep context
 small; avoid loading the entire repo into the model.
 
+For long autonomous runs, apply `docs/loop/AUTONOMY.md` before starting the
+maker agent. It documents the Codex/Claude Code permissions that prevent routine
+Bun, Docker, GitHub, and localhost smoke checks from turning into repeated
+approval stops.
+
+## Failure Triage
+
+Do not patch CI failures blindly. First classify the failure:
+
+- Deterministic failures, such as syntax, typecheck, lint, unit tests, Docker
+  build, or API smoke, require root-cause investigation and a targeted fix.
+- Eventual failures, such as reviewer output not being available yet or service
+  health races, require bounded polling/retry plus diagnostics.
+- Blocked failures, such as missing credentials, missing reviewer app
+  installation, forbidden file scope, or two repeated failures of the same
+  command, require a clear stop report.
+
+Harness changes are allowed when they are tied to a concrete failure and add
+one of: a local verifier check, a bounded retry, or a runbook entry for the
+human action.
+
+After every push to an open PR, watch CI instead of waiting manually:
+
+```bash
+node scripts/loop/ci-watch.mjs --repo ticvision/bonfire-db --pr 1 --wait-seconds 1800 --poll-seconds 30
+```
+
+If a check fails, the watcher prints the failed check names, job links, and
+relevant GitHub Actions log lines. Treat that output as the next investigation
+input, fix the root cause, push, and rerun the watcher until all checks pass or
+a stop condition applies.
+
+## External Reviewer Gates
+
+Greptile is asynchronous. The loop gate must wait for review output before
+failing for absence, but it must still fail immediately when a visible Greptile
+score is below `5/5`.
+
+Draft PRs skip the Greptile gate. Marking the PR ready for review triggers the
+Greptile score gate.
+
+The fallback parser checks PR comments, PR reviews, and check runs on both the
+workflow event SHA and the PR head SHA:
+
+```bash
+node scripts/loop/greptile-gate.mjs --wait-seconds 1200 --poll-seconds 30
+```
+
+Temporary CI behavior while Greptile setup is being stabilized: CI waits up to
+`GREPTILE_WAIT_SECONDS` seconds, defaulting to 1200, and fails when a visible
+Greptile score is below `5/5`. A missing Greptile artifact soft-passes after the
+wait window with diagnostics. Set repository variable `GREPTILE_PENDING_EXIT_CODE=1`
+after Greptile reliably reviews new commits to restore strict missing-review
+failures.
+
+Configure one Greptile trigger path when Greptile exposes it:
+
+- Default comment trigger: `--trigger` posts `@greptileai` once per head SHA.
+- URL trigger: set `GREPTILE_TRIGGER_URL` and optional
+  `GREPTILE_TRIGGER_TOKEN`; this does not also post the default comment.
+- Comment trigger override: set `GREPTILE_TRIGGER_COMMENT` to a more specific
+  bot command. The harness posts it once per head SHA.
+
+When a Greptile summary says which commit it reviewed, the gate rejects stale
+summaries that do not match the current PR head or merge SHA.
+
+Harness-authored trigger comments are marked and ignored as review output, so
+`@greptileai` trigger comments cannot mask a missing scored Greptile summary.
+
+CI only attempts a trigger when `GREPTILE_TRIGGER_URL` or
+`GREPTILE_TRIGGER_COMMENT` is configured. Set `GREPTILE_TRIGGER_REQUIRED=true`
+only when that trigger path is known to work.
+
+If the organization blocks write permissions for the default `GITHUB_TOKEN`, set
+`GREPTILE_GH_TOKEN` to a fine-grained token that can read pull requests/checks
+and write PR comments for this repository. The workflow uses that secret when it
+exists and falls back to `github.token` otherwise.
+
+If no Greptile output is visible after the wait, check the Greptile dashboard
+repository enablement, filters, indexing status, and GitHub webhook deliveries.
+Treat persistent absence as a blocked external review setup problem, not a BF
+task implementation failure.
+
 ## Stop Conditions
 
 Stop and report instead of continuing when:
@@ -78,7 +161,8 @@ Stop and report instead of continuing when:
 - `MAX ATTEMPTS`, `MAX TURNS`, or `MAX BUDGET USD` is reached.
 - The task needs a product decision not covered by the slice contract.
 - A security auditor returns `BLOCKING`.
-- Greptile cannot be read from GitHub after the PR is ready for review.
+- Greptile cannot be read from GitHub persistently after the configured wait
+  window and strict pending failure is enabled.
 - A task requires files outside its `allowedPaths`; stop and update the task
   contract in a separate harness PR.
 

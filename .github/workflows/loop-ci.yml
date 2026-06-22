@@ -2,6 +2,7 @@ name: Loop CI
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [main]
 
@@ -18,14 +19,11 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Check shell scripts
-        run: |
-          bash -n scripts/loop/create-worktree.sh
-          bash -n scripts/loop/verify.sh
+        run: bash -n scripts/loop/*.sh
       - name: Check Node scripts
-        run: |
-          node --check scripts/loop/ledger.mjs
-          node --check scripts/loop/greptile-gate.mjs
-          node --check scripts/loop/task.mjs
+        run: node --check scripts/loop/*.mjs
+      - name: Test harness scripts
+        run: node --test scripts/loop/*.test.mjs
       - name: Validate task registry
         run: node scripts/loop/task.mjs validate
 
@@ -44,13 +42,24 @@ jobs:
           scripts/loop/verify.sh
 
   greptile:
-    name: Greptile 5/5 gate
-    if: github.event_name == 'pull_request'
+    name: Greptile review gate
+    if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: write
+      checks: read
     env:
-      GH_TOKEN: ${{ github.token }}
+      GH_TOKEN: ${{ secrets.GREPTILE_GH_TOKEN || github.token }}
       PR_NUMBER: ${{ github.event.pull_request.number }}
+      GREPTILE_TRIGGER_URL: ${{ secrets.GREPTILE_TRIGGER_URL }}
+      GREPTILE_TRIGGER_TOKEN: ${{ secrets.GREPTILE_TRIGGER_TOKEN }}
+      GREPTILE_TRIGGER_COMMENT: ${{ secrets.GREPTILE_TRIGGER_COMMENT || vars.GREPTILE_TRIGGER_COMMENT }}
+      GREPTILE_TRIGGER_REQUIRED: ${{ vars.GREPTILE_TRIGGER_REQUIRED || 'false' }}
+      GREPTILE_PENDING_EXIT_CODE: ${{ vars.GREPTILE_PENDING_EXIT_CODE || '0' }}
+      GREPTILE_WAIT_SECONDS: ${{ vars.GREPTILE_WAIT_SECONDS || '1200' }}
     steps:
       - uses: actions/checkout@v5
-      - name: Require Greptile score
-        run: node scripts/loop/greptile-gate.mjs
+      - name: Check Greptile score
+        run: node scripts/loop/greptile-gate.mjs --wait-seconds "${GREPTILE_WAIT_SECONDS}" --poll-seconds 30 --pending-exit-code "${GREPTILE_PENDING_EXIT_CODE}"

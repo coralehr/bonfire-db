@@ -1,0 +1,52 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg18
+    environment:
+      POSTGRES_DB: bonfire
+      POSTGRES_USER: bonfire
+      POSTGRES_PASSWORD: bonfire_local_only
+    ports:
+      - "127.0.0.1:15432:5432"
+    volumes:
+      # PostgreSQL 18 Docker images create major-versioned data dirs under this parent.
+      - bonfire-postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U bonfire -d bonfire"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build:
+      context: .
+      target: api
+    environment:
+      BONFIRE_API_HOST: 0.0.0.0
+      BONFIRE_API_PORT: 8080
+      DATABASE_URL: postgresql://bonfire:bonfire_local_only@postgres:5432/bonfire
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:8080/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))\""]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  demo:
+    build:
+      context: .
+      target: demo
+    environment:
+      BONFIRE_DEMO_HOST: 0.0.0.0
+      BONFIRE_DEMO_PORT: 5173
+    ports:
+      - "127.0.0.1:5173:5173"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  bonfire-postgres-data:

@@ -109,3 +109,44 @@ do not target PostgreSQL 19 beta for the demo.
 When a loop fails, record the failure in `task-status.json` and `STATE.md`.
 Harness changes are accepted only when they are tied to a concrete failure and
 the harness syntax/registry checks still pass.
+
+### 9. Classify Failures Before Retrying
+
+The BF-01 PR exposed a harness failure: the Greptile gate treated missing
+external reviewer output as an immediate implementation failure. That is wrong
+for asynchronous reviewer systems. The harness now separates:
+
+- deterministic failures that should fail fast and be fixed at root cause;
+- eventual failures that should receive bounded polling with diagnostics;
+- blocked failures that should stop only after the wait budget or retry budget
+  is exhausted.
+
+Bonfire implementation:
+
+- `scripts/loop/greptile-gate.mjs` polls for missing Greptile artifacts when
+  configured with `--wait-seconds`.
+- The gate inspects both GitHub's pull-request event SHA and the PR head SHA.
+- Draft PRs skip the Greptile CI job and rerun it on GitHub's
+  `ready_for_review` event.
+- Ready PRs call an opt-in Greptile trigger hook before polling. The hook can
+  POST to a configured URL or post a configured bot-command comment once per
+  head SHA.
+- Official Greptile docs say reviews normally post in about three minutes,
+  manual review is triggered by commenting `@greptileai`, and no-review failures
+  should be debugged via repository enablement, filters, draft settings,
+  webhook deliveries, and indexing status.
+- On PR #1, Greptile eventually posted a 5/5 review for head `5059ffa`, but only
+  after the 15-minute CI gate had timed out. CI now defaults to a configurable
+  20-minute wait via `GREPTILE_WAIT_SECONDS=1200`.
+- Until Greptile is reliably producing reviews on new commits inside that wait
+  window, CI soft-passes missing Greptile output after timeout but still fails
+  visible sub-5 scores. Restore strict missing-review failure with
+  `GREPTILE_PENDING_EXIT_CODE=1`.
+- `scripts/loop/ci-watch.mjs` polls PR checks after each push and extracts
+  relevant GitHub Actions failure lines so the next repair loop starts from
+  concrete evidence.
+- The gate has unit tests covering pass, sub-5 failure, no output, incomplete
+  output, check-run body extraction, SHA selection, and trigger payload/comment
+  rendering.
+- `scripts/loop/verify.sh` runs the harness syntax and unit tests locally before
+  app verification.
