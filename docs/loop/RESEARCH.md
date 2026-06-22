@@ -126,6 +126,8 @@ Bonfire implementation:
 - `scripts/loop/greptile-gate.mjs` polls for missing Greptile artifacts when
   configured with `--wait-seconds`.
 - The gate inspects both GitHub's pull-request event SHA and the PR head SHA.
+- Draft PRs skip the Greptile CI job and rerun it on GitHub's
+  `ready_for_review` event.
 - The gate has unit tests covering pass, sub-5 failure, no output, incomplete
   output, check-run body extraction, and SHA selection.
 - `scripts/loop/verify.sh` runs the harness syntax and unit tests locally before

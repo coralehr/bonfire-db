@@ -169,6 +169,7 @@ function fetchSnapshot({ repo, pr, explicitSha }) {
   return {
     candidates: collectCandidates({ comments, reviews, checkRuns }),
     checkRuns,
+    draft: Boolean(pull.draft),
     shas,
   };
 }
@@ -220,7 +221,7 @@ async function run() {
 
   const startedAt = Date.now();
   let attempt = 0;
-  let lastSnapshot = { checkRuns: [], shas: [] };
+  let lastSnapshot = { checkRuns: [], draft: false, shas: [] };
   let lastOutcome;
 
   while (true) {
@@ -244,6 +245,11 @@ async function run() {
       return 1;
     }
 
+    if (lastSnapshot.draft && lastOutcome.status === "pending") {
+      console.error("greptile-gate: PR is draft; Greptile may not publish review output until ready_for_review");
+      break;
+    }
+
     if (!canRetry({ outcome: lastOutcome, startedAt, waitSeconds })) break;
 
     const waitMs = sleepMs({ startedAt, waitSeconds, pollSeconds });
@@ -255,6 +261,9 @@ async function run() {
   console.error(`greptile-gate: ${lastOutcome.message}`);
   if (lastOutcome.source) console.error(`greptile-gate: source ${lastOutcome.source}`);
   if (lastOutcome.status === "pending") {
+    if (lastSnapshot.draft) {
+      console.error("greptile-gate: draft PR detected; mark the PR ready for review to require Greptile 5/5");
+    }
     console.error(`greptile-gate: inspected shas ${lastSnapshot.shas.join(", ") || "none"}`);
     console.error("greptile-gate: visible check runs:");
     console.error(formatCheckRunDiagnostics(lastSnapshot.checkRuns));

@@ -2,6 +2,7 @@ name: Loop CI
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [main]
 
@@ -42,7 +43,7 @@ jobs:
 
   greptile:
     name: Greptile 5/5 gate
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}

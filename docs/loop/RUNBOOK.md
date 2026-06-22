@@ -97,6 +97,9 @@ Greptile is asynchronous. The loop gate must wait for review output before
 failing for absence, but it must still fail immediately when a visible Greptile
 score is below `5/5`.
 
+Draft PRs skip the Greptile gate. Marking the PR ready for review triggers the
+strict Greptile `5/5` gate.
+
 The fallback parser checks PR comments, PR reviews, and check runs on both the
 workflow event SHA and the PR head SHA:
 

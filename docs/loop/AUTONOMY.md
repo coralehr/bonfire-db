@@ -91,6 +91,9 @@ CI currently waits up to 15 minutes:
 node scripts/loop/greptile-gate.mjs --wait-seconds 900 --poll-seconds 30
 ```
 
+Draft PRs intentionally skip the Greptile CI job. When the PR is marked ready
+for review, the `ready_for_review` workflow event runs the strict `5/5` gate.
+
 Local dry run with diagnostics:
 
 ```bash
