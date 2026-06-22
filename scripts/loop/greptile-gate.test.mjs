@@ -3,11 +3,15 @@ import test from "node:test";
 
 import {
   bodiesFrom,
+  buildTriggerPayload,
   collectCandidates,
   evaluateGreptile,
   extractScores,
   formatCheckRunDiagnostics,
+  hasTriggerComment,
+  renderTriggerComment,
   shasToInspect,
+  triggerMarker,
 } from "./greptile-gate.mjs";
 
 test("extractScores accepts common Greptile score formats", () => {
@@ -121,4 +125,52 @@ test("formatCheckRunDiagnostics lists visible check names and app slugs", () => 
   ]);
 
   assert.equal(diagnostics, "Harness syntax: completed/success (github-actions)");
+});
+
+test("buildTriggerPayload captures PR metadata for external review triggers", () => {
+  const payload = buildTriggerPayload({
+    repo: "ticvision/bonfire-db",
+    pr: "1",
+    pull: {
+      html_url: "https://github.com/ticvision/bonfire-db/pull/1",
+      head: {
+        ref: "loop/BF-01",
+        sha: "head-sha",
+      },
+    },
+    shas: ["merge-sha", "head-sha"],
+  });
+
+  assert.deepEqual(payload, {
+    action: "review",
+    provider: "github",
+    repository: "ticvision/bonfire-db",
+    pullRequest: 1,
+    pullRequestUrl: "https://github.com/ticvision/bonfire-db/pull/1",
+    headRef: "loop/BF-01",
+    headSha: "head-sha",
+    mergeSha: "merge-sha",
+    inspectedShas: ["merge-sha", "head-sha"],
+  });
+});
+
+test("renderTriggerComment expands placeholders and appends an idempotency marker", () => {
+  const payload = {
+    repository: "ticvision/bonfire-db",
+    pullRequest: 1,
+    pullRequestUrl: "https://github.com/ticvision/bonfire-db/pull/1",
+    headRef: "loop/BF-01",
+    headSha: "head-sha",
+  };
+  const body = renderTriggerComment("review {repo}#{pr} at {sha}", payload);
+
+  assert.match(body, /review ticvision\/bonfire-db#1 at head-sha/);
+  assert.match(body, /bonfire-greptile-trigger:head-sha/);
+});
+
+test("hasTriggerComment detects an existing trigger marker", () => {
+  const marker = triggerMarker({ headSha: "head-sha" });
+
+  assert.equal(hasTriggerComment([{ body: `already posted ${marker}` }], marker), true);
+  assert.equal(hasTriggerComment([{ body: "different comment" }], marker), false);
 });

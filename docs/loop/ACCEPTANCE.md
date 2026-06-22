@@ -88,6 +88,7 @@ that check. If Greptile reports by comment or review body, the fallback
 The fallback gate must distinguish reviewer absence from reviewer failure:
 
 - skip draft PRs until the PR is marked ready for review;
+- trigger a configured Greptile review request before polling;
 - poll boundedly when no Greptile artifact is visible yet;
 - inspect both pull-request merge SHA and head SHA check runs;
 - fail immediately when a visible score is below `5/5`;

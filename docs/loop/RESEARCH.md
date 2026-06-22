@@ -128,7 +128,11 @@ Bonfire implementation:
 - The gate inspects both GitHub's pull-request event SHA and the PR head SHA.
 - Draft PRs skip the Greptile CI job and rerun it on GitHub's
   `ready_for_review` event.
+- Ready PRs call an opt-in Greptile trigger hook before polling. The hook can
+  POST to a configured URL or post a configured bot-command comment once per
+  head SHA.
 - The gate has unit tests covering pass, sub-5 failure, no output, incomplete
-  output, check-run body extraction, and SHA selection.
+  output, check-run body extraction, SHA selection, and trigger payload/comment
+  rendering.
 - `scripts/loop/verify.sh` runs the harness syntax and unit tests locally before
   app verification.

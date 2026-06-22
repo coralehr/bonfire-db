@@ -104,8 +104,15 @@ The fallback parser checks PR comments, PR reviews, and check runs on both the
 workflow event SHA and the PR head SHA:
 
 ```bash
-node scripts/loop/greptile-gate.mjs --wait-seconds 900 --poll-seconds 30
+node scripts/loop/greptile-gate.mjs --trigger --wait-seconds 900 --poll-seconds 30
 ```
+
+Configure one Greptile trigger path when Greptile exposes it:
+
+- URL trigger: set `GREPTILE_TRIGGER_URL` and optional
+  `GREPTILE_TRIGGER_TOKEN`.
+- Comment trigger: set `GREPTILE_TRIGGER_COMMENT` to the exact bot command
+  Greptile supports. The harness posts it once per head SHA.
 
 If no Greptile output is visible after the wait, treat it as a blocked external
 review setup problem, not a BF task implementation failure.

@@ -11,6 +11,10 @@ function readArg(argv, name) {
   return argv[index + 1];
 }
 
+function readFlag(argv, name) {
+  return argv.includes(`--${name}`);
+}
+
 function readIntOption({ argv, name, envName, fallback }) {
   const raw = readArg(argv, name) ?? process.env[envName];
   if (raw === undefined || raw === "") return fallback;
@@ -29,6 +33,12 @@ function readExitCode({ argv, envName, fallback }) {
     throw new Error("pending-exit-code must be an integer from 0 to 255");
   }
   return value;
+}
+
+function readBoolOption({ argv, name, envName, fallback }) {
+  const raw = readArg(argv, name) ?? process.env[envName];
+  if (raw === undefined || raw === "") return fallback;
+  return /^(1|true|yes|on)$/i.test(raw);
 }
 
 function unique(values) {
@@ -127,6 +137,40 @@ export function formatCheckRunDiagnostics(checkRuns) {
     .join("\n");
 }
 
+export function buildTriggerPayload({ repo, pr, pull, shas }) {
+  return {
+    action: "review",
+    provider: "github",
+    repository: repo,
+    pullRequest: Number(pr),
+    pullRequestUrl: pull.html_url,
+    headRef: pull.head?.ref,
+    headSha: pull.head?.sha,
+    mergeSha: shas.find((sha) => sha !== pull.head?.sha) || undefined,
+    inspectedShas: shas,
+  };
+}
+
+export function triggerMarker(payload) {
+  return `<!-- bonfire-greptile-trigger:${payload.headSha || "unknown"} -->`;
+}
+
+export function renderTriggerComment(template, payload) {
+  const replacements = {
+    repo: payload.repository,
+    pr: String(payload.pullRequest),
+    pr_url: payload.pullRequestUrl,
+    sha: payload.headSha || "",
+    head_ref: payload.headRef || "",
+  };
+  const body = String(template).replace(/\{(repo|pr|pr_url|sha|head_ref)\}/g, (_match, key) => replacements[key]);
+  return `${body}\n\n${triggerMarker(payload)}`;
+}
+
+export function hasTriggerComment(comments, marker) {
+  return comments.some((comment) => String(comment.body || "").includes(marker));
+}
+
 function normalizePaginated(parsed) {
   if (Array.isArray(parsed) && parsed.every(Array.isArray)) return parsed.flat();
   if (Array.isArray(parsed) && parsed.length === 1) return parsed[0];
@@ -150,6 +194,76 @@ function gh(path, options = {}) {
   }
 }
 
+function ghPost(path, fields) {
+  const args = ["api", path];
+  for (const [key, value] of Object.entries(fields)) {
+    args.push("-f", `${key}=${value}`);
+  }
+
+  try {
+    const output = execFileSync("gh", args, {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    return output ? JSON.parse(output) : {};
+  } catch (error) {
+    const stderr = error.stderr ? String(error.stderr).trim() : "";
+    throw new Error(`gh api failed for ${path}${stderr ? `\n${stderr}` : ""}`);
+  }
+}
+
+async function postTriggerUrl({ triggerUrl, triggerToken, payload }) {
+  const headers = {
+    "content-type": "application/json",
+  };
+  if (triggerToken) headers.authorization = `Bearer ${triggerToken}`;
+
+  const response = await fetch(triggerUrl, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`trigger URL returned HTTP ${response.status}${text ? `: ${text.slice(0, 500)}` : ""}`);
+  }
+
+  return `trigger URL accepted review request with HTTP ${response.status}`;
+}
+
+async function triggerGreptile({ repo, pr, snapshot, triggerUrl, triggerToken, triggerComment }) {
+  const payload = buildTriggerPayload({
+    repo,
+    pr,
+    pull: snapshot.pull,
+    shas: snapshot.shas,
+  });
+  const messages = [];
+
+  if (triggerUrl) {
+    messages.push(await postTriggerUrl({ triggerUrl, triggerToken, payload }));
+  }
+
+  if (triggerComment) {
+    const marker = triggerMarker(payload);
+    if (hasTriggerComment(snapshot.comments, marker)) {
+      messages.push("trigger comment already exists for this head SHA");
+    } else {
+      ghPost(`repos/${repo}/issues/${pr}/comments`, {
+        body: renderTriggerComment(triggerComment, payload),
+      });
+      messages.push("posted Greptile trigger comment");
+    }
+  }
+
+  if (messages.length === 0) {
+    messages.push("trigger requested, but no GREPTILE_TRIGGER_URL or GREPTILE_TRIGGER_COMMENT is configured");
+  }
+
+  return messages;
+}
+
 function fetchSnapshot({ repo, pr, explicitSha }) {
   const comments = gh(`repos/${repo}/issues/${pr}/comments`);
   const reviews = gh(`repos/${repo}/pulls/${pr}/reviews`);
@@ -169,7 +283,9 @@ function fetchSnapshot({ repo, pr, explicitSha }) {
   return {
     candidates: collectCandidates({ comments, reviews, checkRuns }),
     checkRuns,
+    comments,
     draft: Boolean(pull.draft),
+    pull,
     shas,
   };
 }
@@ -191,6 +307,16 @@ async function run() {
   const repo = readArg(argv, "repo") || process.env.GITHUB_REPOSITORY;
   const pr = readArg(argv, "pr") || process.env.PR_NUMBER || process.env.GITHUB_REF_NAME?.match(/^(\d+)\/merge$/)?.[1];
   const explicitSha = readArg(argv, "sha");
+  const triggerUrl = readArg(argv, "trigger-url") || process.env.GREPTILE_TRIGGER_URL || "";
+  const triggerToken = readArg(argv, "trigger-token") || process.env.GREPTILE_TRIGGER_TOKEN || "";
+  const triggerComment = readArg(argv, "trigger-comment") || process.env.GREPTILE_TRIGGER_COMMENT || "";
+  const triggerRequested = readFlag(argv, "trigger") || Boolean(triggerUrl) || Boolean(triggerComment);
+  const triggerRequired = readBoolOption({
+    argv,
+    name: "trigger-required",
+    envName: "GREPTILE_TRIGGER_REQUIRED",
+    fallback: false,
+  });
   const waitSeconds = readIntOption({
     argv,
     name: "wait-seconds",
@@ -221,8 +347,9 @@ async function run() {
 
   const startedAt = Date.now();
   let attempt = 0;
-  let lastSnapshot = { checkRuns: [], draft: false, shas: [] };
+  let lastSnapshot = { checkRuns: [], comments: [], draft: false, pull: {}, shas: [] };
   let lastOutcome;
+  let triggerAttempted = false;
 
   while (true) {
     attempt += 1;
@@ -248,6 +375,26 @@ async function run() {
     if (lastSnapshot.draft && lastOutcome.status === "pending") {
       console.error("greptile-gate: PR is draft; Greptile may not publish review output until ready_for_review");
       break;
+    }
+
+    if (triggerRequested && !triggerAttempted && ["pending", "incomplete"].includes(lastOutcome.status)) {
+      triggerAttempted = true;
+      try {
+        const messages = await triggerGreptile({
+          repo,
+          pr,
+          snapshot: lastSnapshot,
+          triggerUrl,
+          triggerToken,
+          triggerComment,
+        });
+        for (const message of messages) {
+          console.log(`greptile-gate: ${message}`);
+        }
+      } catch (error) {
+        console.error(`greptile-gate: trigger failed: ${error.message}`);
+        if (triggerRequired) return 1;
+      }
     }
 
     if (!canRetry({ outcome: lastOutcome, startedAt, waitSeconds })) break;

@@ -88,17 +88,28 @@ patient about availability:
 CI currently waits up to 15 minutes:
 
 ```bash
-node scripts/loop/greptile-gate.mjs --wait-seconds 900 --poll-seconds 30
+node scripts/loop/greptile-gate.mjs --trigger --wait-seconds 900 --poll-seconds 30
 ```
 
 Draft PRs intentionally skip the Greptile CI job. When the PR is marked ready
 for review, the `ready_for_review` workflow event runs the strict `5/5` gate.
 
+The trigger step is opt-in and supports two automation paths:
+
+- `GREPTILE_TRIGGER_URL` plus optional `GREPTILE_TRIGGER_TOKEN`: POSTs a JSON
+  review request payload to the configured endpoint before polling.
+- `GREPTILE_TRIGGER_COMMENT`: posts that configured bot-command comment to the
+  PR once per head SHA, with placeholders `{repo}`, `{pr}`, `{pr_url}`, `{sha}`,
+  and `{head_ref}`.
+
+If neither is configured, `--trigger` logs a no-op and the gate only polls for
+normal Greptile GitHub App output.
+
 Local dry run with diagnostics:
 
 ```bash
 GH_TOKEN=... GITHUB_REPOSITORY=ticvision/bonfire-db PR_NUMBER=1 \
-  node scripts/loop/greptile-gate.mjs
+  node scripts/loop/greptile-gate.mjs --trigger
 ```
 
 ## Research Basis

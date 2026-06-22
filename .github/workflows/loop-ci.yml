@@ -45,10 +45,19 @@ jobs:
     name: Greptile 5/5 gate
     if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: write
+      checks: read
     env:
       GH_TOKEN: ${{ github.token }}
       PR_NUMBER: ${{ github.event.pull_request.number }}
+      GREPTILE_TRIGGER_URL: ${{ secrets.GREPTILE_TRIGGER_URL }}
+      GREPTILE_TRIGGER_TOKEN: ${{ secrets.GREPTILE_TRIGGER_TOKEN }}
+      GREPTILE_TRIGGER_COMMENT: ${{ secrets.GREPTILE_TRIGGER_COMMENT }}
+      GREPTILE_TRIGGER_REQUIRED: ${{ vars.GREPTILE_TRIGGER_REQUIRED }}
     steps:
       - uses: actions/checkout@v5
       - name: Require Greptile score
-        run: node scripts/loop/greptile-gate.mjs --wait-seconds 900 --poll-seconds 30
+        run: node scripts/loop/greptile-gate.mjs --trigger --wait-seconds 900 --poll-seconds 30
