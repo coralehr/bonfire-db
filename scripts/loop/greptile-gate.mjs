@@ -15,12 +15,19 @@ if (!repo || !pr) {
   process.exit(1);
 }
 
-function gh(path) {
+function gh(path, options = {}) {
+  const paginate = options.paginate ?? true;
+  const args = ["api", path];
+  if (paginate) args.push("--paginate", "--slurp");
   try {
-    return JSON.parse(execFileSync("gh", ["api", path, "--paginate"], {
+    const parsed = JSON.parse(execFileSync("gh", args, {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
     }));
+    if (!paginate) return parsed;
+    if (Array.isArray(parsed) && parsed.every(Array.isArray)) return parsed.flat();
+    if (Array.isArray(parsed) && parsed.length === 1) return parsed[0];
+    return parsed;
   } catch (error) {
     console.error(`greptile-gate: gh api failed for ${path}`);
     if (error.stderr) console.error(String(error.stderr));
@@ -47,7 +54,7 @@ const reviews = bodiesFrom(gh(`repos/${repo}/pulls/${pr}/reviews`));
 let checkRuns = [];
 
 if (sha) {
-  const checkPayload = gh(`repos/${repo}/commits/${sha}/check-runs`);
+  const checkPayload = gh(`repos/${repo}/commits/${sha}/check-runs`, { paginate: false });
   checkRuns = bodiesFrom(checkPayload.check_runs || []);
 }
 
