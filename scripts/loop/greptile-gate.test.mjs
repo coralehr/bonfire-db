@@ -4,12 +4,15 @@ import test from "node:test";
 import {
   bodiesFrom,
   buildTriggerPayload,
+  candidatesForShas,
   collectCandidates,
   evaluateGreptile,
+  extractReviewedShas,
   extractScores,
   formatCheckRunDiagnostics,
   hasTriggerComment,
   renderTriggerComment,
+  resolveTriggerOptions,
   shasToInspect,
   triggerMarker,
 } from "./greptile-gate.mjs";
@@ -83,6 +86,68 @@ test("bodiesFrom includes Greptile check run output title, summary, and text", (
   assert.match(bodies[0].body, /Review complete/);
   assert.match(bodies[0].body, /Score: 5\/5/);
   assert.match(bodies[0].body, /No blocking issues/);
+});
+
+test("extractReviewedShas finds Greptile review footer commit links", () => {
+  const shas = extractReviewedShas(
+    'Last reviewed commit: ["message"](https://github.com/ticvision/bonfire-db/commit/6c9aabd75b565cdfab52f8d2b67ae40cab816302)',
+  );
+
+  assert.deepEqual(shas, ["6c9aabd75b565cdfab52f8d2b67ae40cab816302"]);
+});
+
+test("candidatesForShas drops stale scored reviews for older commits", () => {
+  const candidates = [
+    {
+      body: "Confidence Score: 5/5",
+      reviewedShas: ["old-sha"],
+      source: "old",
+    },
+    {
+      body: "Confidence Score: 4/5",
+      reviewedShas: ["current-sha"],
+      source: "current",
+    },
+    {
+      body: "Confidence Score: 3/5",
+      reviewedShas: [],
+      source: "unscoped",
+    },
+  ];
+
+  assert.deepEqual(
+    candidatesForShas(candidates, ["current-sha"]).map((candidate) => candidate.source),
+    ["current", "unscoped"],
+  );
+});
+
+test("resolveTriggerOptions keeps URL and comment triggers independent", () => {
+  assert.deepEqual(resolveTriggerOptions({
+    triggerFlag: true,
+    triggerUrl: "",
+    explicitTriggerComment: "",
+  }), {
+    triggerRequested: true,
+    triggerComment: "@greptileai",
+  });
+
+  assert.deepEqual(resolveTriggerOptions({
+    triggerFlag: true,
+    triggerUrl: "https://example.test/trigger",
+    explicitTriggerComment: "",
+  }), {
+    triggerRequested: true,
+    triggerComment: "",
+  });
+
+  assert.deepEqual(resolveTriggerOptions({
+    triggerFlag: false,
+    triggerUrl: "https://example.test/trigger",
+    explicitTriggerComment: "@greptileai review this draft",
+  }), {
+    triggerRequested: true,
+    triggerComment: "@greptileai review this draft",
+  });
 });
 
 test("collectCandidates sorts comments, reviews, and check runs chronologically", () => {

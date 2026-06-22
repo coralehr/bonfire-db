@@ -96,14 +96,18 @@ for review, the `ready_for_review` workflow event runs the strict `5/5` gate.
 
 The trigger step is opt-in and supports two automation paths:
 
+- Default comment trigger: `--trigger` posts `@greptileai` once per head SHA.
 - `GREPTILE_TRIGGER_URL` plus optional `GREPTILE_TRIGGER_TOKEN`: POSTs a JSON
-  review request payload to the configured endpoint before polling.
-- `GREPTILE_TRIGGER_COMMENT`: posts that configured bot-command comment to the
-  PR once per head SHA, with placeholders `{repo}`, `{pr}`, `{pr_url}`, `{sha}`,
-  and `{head_ref}`.
+  review request payload to the configured endpoint before polling, without
+  also posting the default comment.
+- `GREPTILE_TRIGGER_COMMENT`: overrides the default bot-command comment. It
+  supports placeholders `{repo}`, `{pr}`, `{pr_url}`, `{sha}`, and `{head_ref}`.
 
-If neither is configured, `--trigger` logs a no-op and the gate only polls for
-normal Greptile GitHub App output.
+Without `--trigger`, the gate only polls for normal Greptile GitHub App output.
+
+When a Greptile summary includes a reviewed commit link, the gate only accepts
+that summary if it matches the current PR head or merge SHA. This prevents an
+old `5/5` review from passing a newer commit.
 
 Local dry run with diagnostics:
 

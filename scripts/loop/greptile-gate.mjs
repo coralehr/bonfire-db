@@ -4,6 +4,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
 const DEFAULT_POLL_SECONDS = 30;
+const DEFAULT_TRIGGER_COMMENT = "@greptileai";
 
 function readArg(argv, name) {
   const index = argv.indexOf(`--${name}`);
@@ -53,6 +54,11 @@ export function checkRunText(item) {
   ].filter(Boolean).join("\n");
 }
 
+export function extractReviewedShas(body) {
+  return [...String(body).matchAll(/\/commit\/([a-f0-9]{7,40})\b/gi)]
+    .map((match) => match[1]);
+}
+
 export function bodiesFrom(items) {
   return items
     .filter((item) => {
@@ -61,13 +67,17 @@ export function bodiesFrom(items) {
       const body = item.body || checkRunText(item);
       return /greptile/i.test(login) || /greptile/i.test(name) || /greptile/i.test(body);
     })
-    .map((item) => ({
-      createdAt: item.submitted_at || item.created_at || item.started_at || "",
-      body: item.body || checkRunText(item),
-      source: item.html_url || item.name || "greptile",
-      status: item.status || "",
-      conclusion: item.conclusion || "",
-    }));
+    .map((item) => {
+      const body = item.body || checkRunText(item);
+      return {
+        createdAt: item.submitted_at || item.created_at || item.started_at || "",
+        body,
+        reviewedShas: extractReviewedShas(body),
+        source: item.html_url || item.name || "greptile",
+        status: item.status || "",
+        conclusion: item.conclusion || "",
+      };
+    });
 }
 
 export function collectCandidates({ comments = [], reviews = [], checkRuns = [] }) {
@@ -120,6 +130,20 @@ export function evaluateGreptile(candidates) {
     source: latest.source,
     score,
   };
+}
+
+export function candidatesForShas(candidates, shas) {
+  const acceptable = new Set(shas.filter(Boolean));
+  return candidates.filter((candidate) => {
+    if (!candidate.reviewedShas?.length) return true;
+    return candidate.reviewedShas.some((sha) => acceptable.has(sha));
+  });
+}
+
+export function resolveTriggerOptions({ triggerFlag, triggerUrl, explicitTriggerComment }) {
+  const triggerRequested = triggerFlag || Boolean(triggerUrl) || Boolean(explicitTriggerComment);
+  const triggerComment = explicitTriggerComment || (triggerFlag && !triggerUrl ? DEFAULT_TRIGGER_COMMENT : "");
+  return { triggerRequested, triggerComment };
 }
 
 export function shasToInspect({ explicitSha, envSha, pull }) {
@@ -281,7 +305,7 @@ function fetchSnapshot({ repo, pr, explicitSha }) {
   }
 
   return {
-    candidates: collectCandidates({ comments, reviews, checkRuns }),
+    candidates: candidatesForShas(collectCandidates({ comments, reviews, checkRuns }), shas),
     checkRuns,
     comments,
     draft: Boolean(pull.draft),
@@ -309,8 +333,12 @@ async function run() {
   const explicitSha = readArg(argv, "sha");
   const triggerUrl = readArg(argv, "trigger-url") || process.env.GREPTILE_TRIGGER_URL || "";
   const triggerToken = readArg(argv, "trigger-token") || process.env.GREPTILE_TRIGGER_TOKEN || "";
-  const triggerComment = readArg(argv, "trigger-comment") || process.env.GREPTILE_TRIGGER_COMMENT || "";
-  const triggerRequested = readFlag(argv, "trigger") || Boolean(triggerUrl) || Boolean(triggerComment);
+  const explicitTriggerComment = readArg(argv, "trigger-comment") || process.env.GREPTILE_TRIGGER_COMMENT || "";
+  const { triggerRequested, triggerComment } = resolveTriggerOptions({
+    triggerFlag: readFlag(argv, "trigger"),
+    triggerUrl,
+    explicitTriggerComment,
+  });
   const triggerRequired = readBoolOption({
     argv,
     name: "trigger-required",

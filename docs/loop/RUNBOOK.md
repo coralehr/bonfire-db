@@ -109,10 +109,14 @@ node scripts/loop/greptile-gate.mjs --trigger --wait-seconds 900 --poll-seconds 
 
 Configure one Greptile trigger path when Greptile exposes it:
 
+- Default comment trigger: `--trigger` posts `@greptileai` once per head SHA.
 - URL trigger: set `GREPTILE_TRIGGER_URL` and optional
-  `GREPTILE_TRIGGER_TOKEN`.
-- Comment trigger: set `GREPTILE_TRIGGER_COMMENT` to the exact bot command
-  Greptile supports. The harness posts it once per head SHA.
+  `GREPTILE_TRIGGER_TOKEN`; this does not also post the default comment.
+- Comment trigger override: set `GREPTILE_TRIGGER_COMMENT` to a more specific
+  bot command. The harness posts it once per head SHA.
+
+When a Greptile summary says which commit it reviewed, the gate rejects stale
+summaries that do not match the current PR head or merge SHA.
 
 If no Greptile output is visible after the wait, treat it as a blocked external
 review setup problem, not a BF task implementation failure.
