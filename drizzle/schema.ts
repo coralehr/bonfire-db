@@ -74,8 +74,8 @@ export const patients = pgTable("patients", {
 
 export const patientRoster = pgTable("patient_roster", {
   practiceId: uuid("practice_id").notNull().references(() => practices.id),
-  actorId: uuid("actor_id").notNull().references(() => actors.id),
-  patientId: uuid("patient_id").notNull().references(() => patients.id),
+  actorId: uuid("actor_id").notNull(),
+  patientId: uuid("patient_id").notNull(),
   relationship: text("relationship").notNull(),
   createdAt: createdAt()
 }, (table) => [
@@ -95,7 +95,7 @@ export const patientRoster = pgTable("patient_roster", {
 export const consents = pgTable("consents", {
   id: uuid("id").primaryKey(),
   practiceId: uuid("practice_id").notNull().references(() => practices.id),
-  patientId: uuid("patient_id").notNull().references(() => patients.id),
+  patientId: uuid("patient_id").notNull(),
   scope: text("scope").notNull(),
   status: text("status", { enum: ["active", "revoked"] }).notNull(),
   recordedAt: timestamp("recorded_at", { withTimezone: true }).notNull()
@@ -111,8 +111,8 @@ export const consents = pgTable("consents", {
 export const notes = pgTable("notes", {
   id: uuid("id").primaryKey(),
   practiceId: uuid("practice_id").notNull().references(() => practices.id),
-  patientId: uuid("patient_id").notNull().references(() => patients.id),
-  authorActorId: uuid("author_actor_id").notNull().references(() => actors.id),
+  patientId: uuid("patient_id").notNull(),
+  authorActorId: uuid("author_actor_id").notNull(),
   noteType: text("note_type").notNull(),
   status: text("status", { enum: ["signed", "draft"] }).notNull(),
   body: text("body").notNull(),
@@ -134,7 +134,7 @@ export const notes = pgTable("notes", {
 export const noteChunks = pgTable("note_chunks", {
   id: uuid("id").primaryKey(),
   practiceId: uuid("practice_id").notNull().references(() => practices.id),
-  noteId: uuid("note_id").notNull().references(() => notes.id),
+  noteId: uuid("note_id").notNull(),
   chunkIndex: integer("chunk_index").notNull(),
   content: text("content").notNull()
 }, (table) => [
@@ -151,7 +151,7 @@ export const noteChunks = pgTable("note_chunks", {
 export const noteEmbeddings = pgTable("note_embeddings", {
   id: uuid("id").primaryKey(),
   practiceId: uuid("practice_id").notNull().references(() => practices.id),
-  noteChunkId: uuid("note_chunk_id").notNull().references(() => noteChunks.id),
+  noteChunkId: uuid("note_chunk_id").notNull(),
   fixtureKey: text("fixture_key").notNull(),
   embeddingModel: text("embedding_model").notNull(),
   embedding: vector("embedding", { dimensions: embeddingDimensions }).notNull(),
@@ -168,8 +168,8 @@ export const noteEmbeddings = pgTable("note_embeddings", {
 export const draftNotes = pgTable("draft_notes", {
   id: uuid("id").primaryKey(),
   practiceId: uuid("practice_id").notNull().references(() => practices.id),
-  patientId: uuid("patient_id").notNull().references(() => patients.id),
-  proposerActorId: uuid("proposer_actor_id").notNull().references(() => actors.id),
+  patientId: uuid("patient_id").notNull(),
+  proposerActorId: uuid("proposer_actor_id").notNull(),
   noteType: text("note_type").notNull(),
   proposedText: text("proposed_text").notNull(),
   status: text("status", { enum: ["proposed", "approved", "rejected"] }).notNull(),
@@ -200,7 +200,7 @@ export const terminologyCodes = pgTable("terminology_codes", {
 export const fhirImports = pgTable("fhir_imports", {
   id: uuid("id").primaryKey(),
   practiceId: uuid("practice_id").notNull().references(() => practices.id),
-  patientId: uuid("patient_id").notNull().references(() => patients.id),
+  patientId: uuid("patient_id").notNull(),
   bundleType: text("bundle_type").notNull(),
   bundleHash: text("bundle_hash").notNull(),
   sourceLabel: text("source_label").notNull(),
@@ -217,7 +217,7 @@ export const fhirImports = pgTable("fhir_imports", {
 export const auditEvents = pgTable("audit_events", {
   id: uuid("id").primaryKey(),
   practiceId: uuid("practice_id").notNull().references(() => practices.id),
-  actorId: uuid("actor_id").notNull().references(() => actors.id),
+  actorId: uuid("actor_id").notNull(),
   action: text("action").notNull(),
   targetType: text("target_type").notNull(),
   targetId: text("target_id").notNull(),

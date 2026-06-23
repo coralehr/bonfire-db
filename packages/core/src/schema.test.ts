@@ -48,6 +48,19 @@ describe("BF-02 schema contract", () => {
     }
   });
 
+  test("does not duplicate compound tenant FKs as single-column references", () => {
+    for (const redundantReference of [
+      'actorId: uuid("actor_id").notNull().references',
+      'patientId: uuid("patient_id").notNull().references',
+      'authorActorId: uuid("author_actor_id").notNull().references',
+      'noteId: uuid("note_id").notNull().references',
+      'noteChunkId: uuid("note_chunk_id").notNull().references',
+      'proposerActorId: uuid("proposer_actor_id").notNull().references'
+    ]) {
+      expect(drizzleSchema).not.toContain(redundantReference);
+    }
+  });
+
   test("tracks practice_id on every clinical table", () => {
     expect(clinicalTablesWithPracticeId).toEqual(clinicalTableNames);
 
