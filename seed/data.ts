@@ -1,5 +1,7 @@
+import { seedCompleteKey as sharedSeedCompleteKey } from "../packages/core/src/schema.js";
+
 export const seedVersion = "BF-02.1";
-export const seedCompleteKey = "seed_complete";
+export const seedCompleteKey = sharedSeedCompleteKey;
 export const zeroHash = "0".repeat(64);
 
 const practiceId = "11111111-1111-4111-8111-111111111111";

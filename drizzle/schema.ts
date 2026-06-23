@@ -1,4 +1,16 @@
-import { customType, integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import {
+  check,
+  customType,
+  foreignKey,
+  integer,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+  unique,
+  uuid
+} from "drizzle-orm/pg-core";
 
 const embeddingDimensions = 8;
 
@@ -30,7 +42,9 @@ export const practices = pgTable("practices", {
   slug: text("slug").notNull(),
   name: text("name").notNull(),
   createdAt: createdAt()
-});
+}, (table) => [
+  unique("practices_slug_key").on(table.slug)
+]);
 
 export const actors = pgTable("actors", {
   id: uuid("id").primaryKey(),
@@ -39,7 +53,11 @@ export const actors = pgTable("actors", {
   displayName: text("display_name").notNull(),
   email: text("email").notNull(),
   createdAt: createdAt()
-});
+}, (table) => [
+  unique("actors_email_key").on(table.email),
+  unique("actors_id_practice_unique").on(table.id, table.practiceId),
+  check("actors_email_example_check", sql`${table.email} ~* '@example\\.(com|org|net)$'`)
+]);
 
 export const patients = pgTable("patients", {
   id: uuid("id").primaryKey(),
@@ -48,7 +66,11 @@ export const patients = pgTable("patients", {
   displayName: text("display_name").notNull(),
   birthYear: integer("birth_year").notNull(),
   createdAt: createdAt()
-});
+}, (table) => [
+  unique("patients_practice_mrn_unique").on(table.practiceId, table.syntheticMrn),
+  unique("patients_id_practice_unique").on(table.id, table.practiceId),
+  check("patients_birth_year_check", sql`${table.birthYear} BETWEEN 1900 AND 2100`)
+]);
 
 export const patientRoster = pgTable("patient_roster", {
   practiceId: uuid("practice_id").notNull().references(() => practices.id),
@@ -56,7 +78,19 @@ export const patientRoster = pgTable("patient_roster", {
   patientId: uuid("patient_id").notNull().references(() => patients.id),
   relationship: text("relationship").notNull(),
   createdAt: createdAt()
-});
+}, (table) => [
+  primaryKey({ name: "patient_roster_pkey", columns: [table.practiceId, table.actorId, table.patientId] }),
+  foreignKey({
+    name: "patient_roster_actor_practice_fk",
+    columns: [table.actorId, table.practiceId],
+    foreignColumns: [actors.id, actors.practiceId]
+  }).onDelete("cascade"),
+  foreignKey({
+    name: "patient_roster_patient_practice_fk",
+    columns: [table.patientId, table.practiceId],
+    foreignColumns: [patients.id, patients.practiceId]
+  }).onDelete("cascade")
+]);
 
 export const consents = pgTable("consents", {
   id: uuid("id").primaryKey(),
@@ -65,7 +99,14 @@ export const consents = pgTable("consents", {
   scope: text("scope").notNull(),
   status: text("status", { enum: ["active", "revoked"] }).notNull(),
   recordedAt: timestamp("recorded_at", { withTimezone: true }).notNull()
-});
+}, (table) => [
+  unique("consents_patient_scope_unique").on(table.practiceId, table.patientId, table.scope),
+  foreignKey({
+    name: "consents_patient_practice_fk",
+    columns: [table.patientId, table.practiceId],
+    foreignColumns: [patients.id, patients.practiceId]
+  }).onDelete("cascade")
+]);
 
 export const notes = pgTable("notes", {
   id: uuid("id").primaryKey(),
@@ -76,7 +117,19 @@ export const notes = pgTable("notes", {
   status: text("status", { enum: ["signed", "draft"] }).notNull(),
   body: text("body").notNull(),
   createdAt: createdAt()
-});
+}, (table) => [
+  unique("notes_id_practice_unique").on(table.id, table.practiceId),
+  foreignKey({
+    name: "notes_patient_practice_fk",
+    columns: [table.patientId, table.practiceId],
+    foreignColumns: [patients.id, patients.practiceId]
+  }).onDelete("restrict"),
+  foreignKey({
+    name: "notes_author_practice_fk",
+    columns: [table.authorActorId, table.practiceId],
+    foreignColumns: [actors.id, actors.practiceId]
+  }).onDelete("restrict")
+]);
 
 export const noteChunks = pgTable("note_chunks", {
   id: uuid("id").primaryKey(),
@@ -84,7 +137,16 @@ export const noteChunks = pgTable("note_chunks", {
   noteId: uuid("note_id").notNull().references(() => notes.id),
   chunkIndex: integer("chunk_index").notNull(),
   content: text("content").notNull()
-});
+}, (table) => [
+  unique("note_chunks_note_index_unique").on(table.noteId, table.chunkIndex),
+  unique("note_chunks_id_practice_unique").on(table.id, table.practiceId),
+  foreignKey({
+    name: "note_chunks_note_practice_fk",
+    columns: [table.noteId, table.practiceId],
+    foreignColumns: [notes.id, notes.practiceId]
+  }).onDelete("cascade"),
+  check("note_chunks_chunk_index_check", sql`${table.chunkIndex} >= 0`)
+]);
 
 export const noteEmbeddings = pgTable("note_embeddings", {
   id: uuid("id").primaryKey(),
@@ -94,7 +156,14 @@ export const noteEmbeddings = pgTable("note_embeddings", {
   embeddingModel: text("embedding_model").notNull(),
   embedding: vector("embedding", { dimensions: embeddingDimensions }).notNull(),
   createdAt: createdAt()
-});
+}, (table) => [
+  unique("note_embeddings_fixture_key_key").on(table.fixtureKey),
+  foreignKey({
+    name: "note_embeddings_chunk_practice_fk",
+    columns: [table.noteChunkId, table.practiceId],
+    foreignColumns: [noteChunks.id, noteChunks.practiceId]
+  }).onDelete("cascade")
+]);
 
 export const draftNotes = pgTable("draft_notes", {
   id: uuid("id").primaryKey(),
@@ -105,7 +174,18 @@ export const draftNotes = pgTable("draft_notes", {
   proposedText: text("proposed_text").notNull(),
   status: text("status", { enum: ["proposed", "approved", "rejected"] }).notNull(),
   createdAt: createdAt()
-});
+}, (table) => [
+  foreignKey({
+    name: "draft_notes_patient_practice_fk",
+    columns: [table.patientId, table.practiceId],
+    foreignColumns: [patients.id, patients.practiceId]
+  }).onDelete("restrict"),
+  foreignKey({
+    name: "draft_notes_actor_practice_fk",
+    columns: [table.proposerActorId, table.practiceId],
+    foreignColumns: [actors.id, actors.practiceId]
+  }).onDelete("restrict")
+]);
 
 export const terminologyCodes = pgTable("terminology_codes", {
   id: uuid("id").primaryKey(),
@@ -113,7 +193,9 @@ export const terminologyCodes = pgTable("terminology_codes", {
   codeSystem: text("code_system").notNull(),
   code: text("code").notNull(),
   display: text("display").notNull()
-});
+}, (table) => [
+  unique("terminology_codes_unique").on(table.practiceId, table.codeSystem, table.code)
+]);
 
 export const fhirImports = pgTable("fhir_imports", {
   id: uuid("id").primaryKey(),
@@ -123,7 +205,14 @@ export const fhirImports = pgTable("fhir_imports", {
   bundleHash: text("bundle_hash").notNull(),
   sourceLabel: text("source_label").notNull(),
   importedAt: timestamp("imported_at", { withTimezone: true }).notNull()
-});
+}, (table) => [
+  unique("fhir_imports_bundle_hash_unique").on(table.practiceId, table.bundleHash),
+  foreignKey({
+    name: "fhir_imports_patient_practice_fk",
+    columns: [table.patientId, table.practiceId],
+    foreignColumns: [patients.id, patients.practiceId]
+  }).onDelete("restrict")
+]);
 
 export const auditEvents = pgTable("audit_events", {
   id: uuid("id").primaryKey(),
@@ -138,7 +227,15 @@ export const auditEvents = pgTable("audit_events", {
   rowHash: text("row_hash").notNull(),
   seedKey: text("seed_key"),
   createdAt: createdAt()
-});
+}, (table) => [
+  unique("audit_events_row_hash_key").on(table.rowHash),
+  unique("audit_events_seed_key_key").on(table.seedKey),
+  foreignKey({
+    name: "audit_events_actor_practice_fk",
+    columns: [table.actorId, table.practiceId],
+    foreignColumns: [actors.id, actors.practiceId]
+  }).onDelete("restrict")
+]);
 
 export const seedState = pgTable("seed_state", {
   seedKey: text("seed_key").primaryKey(),

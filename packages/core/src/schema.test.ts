@@ -28,6 +28,26 @@ describe("BF-02 schema contract", () => {
     }
   });
 
+  test("keeps Drizzle constraints aligned with tenant-scoped SQL guards", () => {
+    expect(drizzleSchema).toContain("patient_roster_pkey");
+    expect(migrationSql).toContain("PRIMARY KEY (practice_id, actor_id, patient_id)");
+
+    for (const constraintName of [
+      "patient_roster_actor_practice_fk",
+      "patient_roster_patient_practice_fk",
+      "actors_id_practice_unique",
+      "patients_id_practice_unique",
+      "patients_practice_mrn_unique",
+      "notes_patient_practice_fk",
+      "notes_author_practice_fk",
+      "note_embeddings_chunk_practice_fk",
+      "audit_events_actor_practice_fk"
+    ]) {
+      expect(drizzleSchema).toContain(constraintName);
+      expect(migrationSql).toContain(constraintName);
+    }
+  });
+
   test("tracks practice_id on every clinical table", () => {
     expect(clinicalTablesWithPracticeId).toEqual(clinicalTableNames);
 
