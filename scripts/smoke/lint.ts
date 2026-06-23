@@ -5,7 +5,7 @@ const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as {
   scripts?: Record<string, string>;
 };
 
-const requiredScripts = ["typecheck", "lint", "test", "smoke:demo", "smoke:offline", "scan:synthetic-only"];
+const requiredScripts = ["typecheck", "lint", "test", "smoke:demo", "smoke:offline", "smoke:policy", "scan:synthetic-only"];
 const missingScripts = requiredScripts.filter((script) => !packageJson.scripts?.[script]);
 
 if (missingScripts.length > 0) {
