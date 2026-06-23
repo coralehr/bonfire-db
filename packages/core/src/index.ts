@@ -17,3 +17,5 @@ export function getHealthStatus(): HealthStatus {
     }
   };
 }
+
+export * from "./schema.js";

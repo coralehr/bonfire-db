@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-06-22T17:40:03.239Z",
+  "updatedAt": "2026-06-23T05:08:46.251Z",
   "tasks": [
     {
       "id": "BF-01",
@@ -13,12 +13,12 @@
     },
     {
       "id": "BF-02",
-      "status": "pending",
-      "attempts": 0,
-      "branch": null,
+      "status": "active",
+      "attempts": 1,
+      "branch": "loop/BF-02",
       "pr": null,
       "greptile": null,
-      "notes": ""
+      "notes": "Local PASS: BF-02 verify commands passed from a clean Postgres volume; scripts/loop/verify.sh passed; security scan found only intentional scanner-test PHI fixtures and example-domain seed emails."
     },
     {
       "id": "BF-03",
