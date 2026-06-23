@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-06-23T13:06:23.595Z",
+  "updatedAt": "2026-06-23T15:25:43Z",
   "tasks": [
     {
       "id": "BF-01",
@@ -27,7 +27,7 @@
       "branch": "loop/BF-03",
       "pr": "https://github.com/coralehr/bonfire-db/pull/3",
       "greptile": null,
-      "notes": "PR opened after local PASS: ABAC/audit tests, smoke:policy from fresh Postgres volume, scripts/loop/verify.sh, synthetic scan, and focused security audit."
+      "notes": "PR updated after local PASS: patient actor self-link policy tests, ABAC/audit tests, smoke:policy from fresh Postgres volume, scripts/loop/verify.sh, synthetic scan, and compose health curl. Greptile skipped because this repo/org is not configured."
     },
     {
       "id": "BF-04",

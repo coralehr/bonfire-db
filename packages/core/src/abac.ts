@@ -1,6 +1,6 @@
 import { AppendOnlyAuditLedger, type AuditDecision, type AuditEvent } from "./audit.js";
 
-export type BonfireActorRole = "clinician" | "agent" | "auditor";
+export type BonfireActorRole = "clinician" | "agent" | "auditor" | "patient";
 export type BonfirePolicyDecision = AuditDecision;
 
 export interface PolicyActor {
@@ -28,8 +28,24 @@ export interface PolicyConsent {
   status: "active" | "revoked";
 }
 
+export interface PolicyPatientActorLink {
+  practiceId: string;
+  actorId: string;
+  patientId: string;
+  relationship: "self";
+  status: "active" | "revoked";
+}
+
 export interface PolicyCheck {
-  name: "clinician_role" | "same_practice" | "roster_membership" | "active_consent";
+  name:
+    | "clinician_role"
+    | "same_practice"
+    | "roster_membership"
+    | "active_consent"
+    | "patient_role"
+    | "patient_actor_link"
+    | "own_patient_record"
+    | "patient_scope";
   passed: boolean;
 }
 
@@ -52,6 +68,7 @@ export interface EvaluatePatientReadPolicyInput {
   patient: PolicyPatient;
   roster: readonly PolicyRosterEntry[];
   consents: readonly PolicyConsent[];
+  patientActorLinks?: readonly PolicyPatientActorLink[];
   scope?: string;
 }
 
@@ -94,14 +111,30 @@ function hasActiveConsent(input: Required<Pick<EvaluatePatientReadPolicyInput, "
   );
 }
 
+function activeSelfPatientLinks(input: Pick<EvaluatePatientReadPolicyInput, "actor" | "patientActorLinks">): PolicyPatientActorLink[] {
+  return (input.patientActorLinks ?? []).filter((link) =>
+    link.practiceId === input.actor.practiceId &&
+    link.actorId === input.actor.id &&
+    link.relationship === "self" &&
+    link.status === "active"
+  );
+}
+
+function isPatientReadScope(scope: string): boolean {
+  return scope === "patient-portal-read";
+}
+
 function receiptReason(checks: readonly PolicyCheck[]): string {
   const failed = checks.filter((check) => !check.passed).map((check) => check.name);
   return failed.length === 0 ? "all_policy_checks_passed" : `policy_denied:${failed.join(",")}`;
 }
 
-export function evaluatePatientReadPolicy(input: EvaluatePatientReadPolicyInput): PolicyReceipt {
-  const scope = input.scope ?? "demo-treatment";
-  const checks: PolicyCheck[] = [
+function defaultScopeForActor(actor: PolicyActor): string {
+  return actor.role === "patient" ? "patient-portal-read" : "demo-treatment";
+}
+
+function clinicianChecks(input: EvaluatePatientReadPolicyInput, scope: string): PolicyCheck[] {
+  return [
     {
       name: "clinician_role",
       passed: input.actor.role === "clinician"
@@ -119,6 +152,41 @@ export function evaluatePatientReadPolicy(input: EvaluatePatientReadPolicyInput)
       passed: hasActiveConsent({ patient: input.patient, consents: input.consents, scope })
     }
   ];
+}
+
+function patientChecks(input: EvaluatePatientReadPolicyInput, scope: string): PolicyCheck[] {
+  const activeSelfLinks = activeSelfPatientLinks(input);
+  const selfLink = activeSelfLinks.length === 1 ? activeSelfLinks[0] : undefined;
+
+  return [
+    {
+      name: "patient_role",
+      passed: input.actor.role === "patient"
+    },
+    {
+      name: "same_practice",
+      passed: input.actor.practiceId === input.patient.practiceId
+    },
+    {
+      name: "patient_actor_link",
+      passed: activeSelfLinks.length === 1
+    },
+    {
+      name: "own_patient_record",
+      passed: selfLink !== undefined &&
+        selfLink.practiceId === input.patient.practiceId &&
+        selfLink.patientId === input.patient.id
+    },
+    {
+      name: "patient_scope",
+      passed: isPatientReadScope(scope)
+    }
+  ];
+}
+
+export function evaluatePatientReadPolicy(input: EvaluatePatientReadPolicyInput): PolicyReceipt {
+  const scope = input.scope ?? defaultScopeForActor(input.actor);
+  const checks = input.actor.role === "patient" ? patientChecks(input, scope) : clinicianChecks(input, scope);
   const decision: BonfirePolicyDecision = checks.every((check) => check.passed) ? "allow" : "deny";
 
   return {
@@ -174,9 +242,12 @@ export function readablePatients<TPatient extends PolicyPatient>(
   patients: readonly TPatient[],
   roster: readonly PolicyRosterEntry[],
   consents: readonly PolicyConsent[],
-  scope = "demo-treatment"
+  scope?: string,
+  patientActorLinks: readonly PolicyPatientActorLink[] = []
 ): TPatient[] {
+  const resolvedScope = scope ?? defaultScopeForActor(actor);
+
   return patients.filter((patient) =>
-    evaluatePatientReadPolicy({ actor, patient, roster, consents, scope }).decision === "allow"
+    evaluatePatientReadPolicy({ actor, patient, roster, consents, scope: resolvedScope, patientActorLinks }).decision === "allow"
   );
 }

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   clinicalTableNames,
@@ -10,7 +10,11 @@ import {
 } from "./schema";
 import { bonfireSeed, seedEmails } from "../../../seed/data";
 
-const migrationSql = readFileSync(join(process.cwd(), "drizzle/0000_bf02_schema.sql"), "utf8");
+const migrationSql = readdirSync(join(process.cwd(), "drizzle"))
+  .filter((fileName) => fileName.endsWith(".sql"))
+  .sort()
+  .map((fileName) => readFileSync(join(process.cwd(), "drizzle", fileName), "utf8"))
+  .join("\n");
 const drizzleSchema = readFileSync(join(process.cwd(), "drizzle/schema.ts"), "utf8");
 
 describe("BF-02 schema contract", () => {
@@ -35,6 +39,9 @@ describe("BF-02 schema contract", () => {
     for (const constraintName of [
       "patient_roster_actor_practice_fk",
       "patient_roster_patient_practice_fk",
+      "patient_actor_links_actor_practice_fk",
+      "patient_actor_links_patient_practice_fk",
+      "patient_actor_links_active_self_actor_unique",
       "actors_id_practice_unique",
       "patients_id_practice_unique",
       "patients_practice_mrn_unique",
@@ -84,6 +91,15 @@ describe("BF-02 schema contract", () => {
   test("audit events include hash-chain columns", () => {
     expect(migrationSql).toContain("prev_hash text NOT NULL");
     expect(migrationSql).toContain("row_hash text NOT NULL");
+  });
+
+  test("patient actor access stays self-linked", () => {
+    expect(migrationSql).toContain("CREATE TABLE IF NOT EXISTS patient_actor_links");
+    expect(migrationSql).toContain("role IN ('clinician', 'agent', 'auditor', 'patient')");
+    expect(migrationSql).toContain("relationship text NOT NULL CHECK (relationship = 'self')");
+    expect(migrationSql).toContain("WHERE relationship = 'self' AND status = 'active'");
+    expect(drizzleSchema).toContain('enum: ["clinician", "agent", "auditor", "patient"]');
+    expect(drizzleSchema).toContain('enum: ["self"]');
   });
 
   test("seed email addresses use example domains only", () => {

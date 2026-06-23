@@ -28,6 +28,12 @@ const agentActor = {
   role: "agent" as const
 };
 
+const patientActor = {
+  id: "22222222-2222-4222-8222-222222222203",
+  practiceId: practiceOne,
+  role: "patient" as const
+};
+
 const allowedPatient = {
   id: "33333333-3333-4333-8333-333333333301",
   practiceId: practiceOne,
@@ -72,6 +78,16 @@ const consents = [
     practiceId: practiceTwo,
     patientId: otherPracticePatient.id,
     scope: "demo-treatment",
+    status: "active" as const
+  }
+] as const;
+
+const patientActorLinks = [
+  {
+    practiceId: practiceOne,
+    actorId: patientActor.id,
+    patientId: allowedPatient.id,
+    relationship: "self" as const,
     status: "active" as const
   }
 ] as const;
@@ -134,6 +150,100 @@ describe("abac patient read policy", () => {
     expect(receipt.reason).toContain("clinician_role");
   });
 
+  test("patient actor can read only their own active self-linked patient record", () => {
+    expect(readablePatients(
+      patientActor,
+      [allowedPatient, unrosteredPatient, otherPracticePatient],
+      roster,
+      consents,
+      undefined,
+      patientActorLinks
+    )).toEqual([allowedPatient]);
+
+    const receipt = evaluatePatientReadPolicy({
+      actor: patientActor,
+      patient: allowedPatient,
+      roster,
+      consents,
+      patientActorLinks
+    });
+
+    expect(receipt.decision).toBe("allow");
+    expect(receipt.scope).toBe("patient-portal-read");
+    expect(receipt.checks.map((check) => check.name)).toEqual([
+      "patient_role",
+      "same_practice",
+      "patient_actor_link",
+      "own_patient_record",
+      "patient_scope"
+    ]);
+    expect(receipt.checks.every((check) => check.passed)).toBe(true);
+  });
+
+  test("patient actor is denied when requesting any patient other than their self-linked record", () => {
+    const receipt = evaluatePatientReadPolicy({
+      actor: patientActor,
+      patient: unrosteredPatient,
+      roster,
+      consents,
+      patientActorLinks
+    });
+
+    expect(receipt.decision).toBe("deny");
+    expect(receipt.reason).toContain("own_patient_record");
+  });
+
+  test("patient actor is denied when their self-link is revoked or ambiguous", () => {
+    const revokedReceipt = evaluatePatientReadPolicy({
+      actor: patientActor,
+      patient: allowedPatient,
+      roster,
+      consents,
+      patientActorLinks: [
+        {
+          ...patientActorLinks[0],
+          status: "revoked" as const
+        }
+      ]
+    });
+
+    const ambiguousReceipt = evaluatePatientReadPolicy({
+      actor: patientActor,
+      patient: allowedPatient,
+      roster,
+      consents,
+      patientActorLinks: [
+        ...patientActorLinks,
+        {
+          practiceId: practiceOne,
+          actorId: patientActor.id,
+          patientId: unrosteredPatient.id,
+          relationship: "self" as const,
+          status: "active" as const
+        }
+      ]
+    });
+
+    expect(revokedReceipt.decision).toBe("deny");
+    expect(revokedReceipt.reason).toContain("patient_actor_link");
+    expect(ambiguousReceipt.decision).toBe("deny");
+    expect(ambiguousReceipt.reason).toContain("patient_actor_link");
+  });
+
+  test("patient actor cannot reuse clinician treatment scope to read records", () => {
+    const receipt = evaluatePatientReadPolicy({
+      actor: patientActor,
+      patient: allowedPatient,
+      roster,
+      consents,
+      patientActorLinks,
+      scope: "demo-treatment"
+    });
+
+    expect(receipt.decision).toBe("deny");
+    expect(receipt.reason).toContain("patient_scope");
+  });
+
   test("allow and deny paths append audit events", () => {
     const audit = new AppendOnlyAuditLedger();
 
@@ -159,5 +269,35 @@ describe("abac patient read policy", () => {
     }
 
     expect(audit.list().map((event) => event.decision)).toEqual(["allow", "deny"]);
+  });
+
+  test("patient actor allow and deny paths append audit receipts", () => {
+    const audit = new AppendOnlyAuditLedger();
+
+    readPatientWithPolicy({
+      actor: patientActor,
+      patient: allowedPatient,
+      roster,
+      consents,
+      patientActorLinks,
+      audit
+    });
+
+    try {
+      readPatientWithPolicy({
+        actor: patientActor,
+        patient: unrosteredPatient,
+        roster,
+        consents,
+        patientActorLinks,
+        audit
+      });
+    } catch (error) {
+      expect(error).toBeInstanceOf(BonfireAccessDenied);
+    }
+
+    const events = audit.list();
+    expect(events.map((event) => event.decision)).toEqual(["allow", "deny"]);
+    expect(events[1]?.reason).toContain("own_patient_record");
   });
 });

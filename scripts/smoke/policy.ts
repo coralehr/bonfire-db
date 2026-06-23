@@ -18,8 +18,17 @@ const wrongClinician = {
   practiceId: "99999999-9999-4999-8999-999999999999",
   role: "clinician" as const
 };
+const patientActor = {
+  id: "22222222-2222-4222-8222-222222222203",
+  practiceId,
+  role: "patient" as const
+};
 const patient = {
   id: "33333333-3333-4333-8333-333333333301",
+  practiceId
+};
+const otherPatient = {
+  id: "33333333-3333-4333-8333-333333333302",
   practiceId
 };
 const roster = [
@@ -35,6 +44,15 @@ const consents = [
     practiceId,
     patientId: patient.id,
     scope: "demo-treatment",
+    status: "active" as const
+  }
+] as const;
+const patientActorLinks = [
+  {
+    practiceId,
+    actorId: patientActor.id,
+    patientId: patient.id,
+    relationship: "self" as const,
     status: "active" as const
   }
 ] as const;
@@ -94,6 +112,32 @@ try {
   fail("wrong clinician read was allowed");
 } catch (error) {
   if (!(error instanceof BonfireAccessDenied)) throw error;
+}
+
+readPatientWithPolicy({
+  actor: patientActor,
+  patient,
+  roster,
+  consents,
+  patientActorLinks,
+  audit
+});
+
+try {
+  readPatientWithPolicy({
+    actor: patientActor,
+    patient: otherPatient,
+    roster,
+    consents,
+    patientActorLinks,
+    audit
+  });
+  fail("patient actor read for another patient was allowed");
+} catch (error) {
+  if (!(error instanceof BonfireAccessDenied)) throw error;
+  if (!error.receipt.reason.includes("own_patient_record")) {
+    fail(`patient actor denial did not prove own-record guard: ${error.receipt.reason}`);
+  }
 }
 
 const chain = verifyAuditHashChain(audit.list());

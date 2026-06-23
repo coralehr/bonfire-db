@@ -9,6 +9,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid
 } from "drizzle-orm/pg-core";
 
@@ -49,7 +50,7 @@ export const practices = pgTable("practices", {
 export const actors = pgTable("actors", {
   id: uuid("id").primaryKey(),
   practiceId: uuid("practice_id").notNull().references(() => practices.id),
-  role: text("role", { enum: ["clinician", "agent", "auditor"] }).notNull(),
+  role: text("role", { enum: ["clinician", "agent", "auditor", "patient"] }).notNull(),
   displayName: text("display_name").notNull(),
   email: text("email").notNull(),
   createdAt: createdAt()
@@ -87,6 +88,30 @@ export const patientRoster = pgTable("patient_roster", {
   }).onDelete("cascade"),
   foreignKey({
     name: "patient_roster_patient_practice_fk",
+    columns: [table.patientId, table.practiceId],
+    foreignColumns: [patients.id, patients.practiceId]
+  }).onDelete("cascade")
+]);
+
+export const patientActorLinks = pgTable("patient_actor_links", {
+  practiceId: uuid("practice_id").notNull().references(() => practices.id),
+  actorId: uuid("actor_id").notNull(),
+  patientId: uuid("patient_id").notNull(),
+  relationship: text("relationship", { enum: ["self"] }).notNull(),
+  status: text("status", { enum: ["active", "revoked"] }).notNull(),
+  createdAt: createdAt()
+}, (table) => [
+  primaryKey({ name: "patient_actor_links_pkey", columns: [table.practiceId, table.actorId, table.patientId] }),
+  uniqueIndex("patient_actor_links_active_self_actor_unique")
+    .on(table.practiceId, table.actorId)
+    .where(sql`${table.relationship} = 'self' AND ${table.status} = 'active'`),
+  foreignKey({
+    name: "patient_actor_links_actor_practice_fk",
+    columns: [table.actorId, table.practiceId],
+    foreignColumns: [actors.id, actors.practiceId]
+  }).onDelete("cascade"),
+  foreignKey({
+    name: "patient_actor_links_patient_practice_fk",
     columns: [table.patientId, table.practiceId],
     foreignColumns: [patients.id, patients.practiceId]
   }).onDelete("cascade")
