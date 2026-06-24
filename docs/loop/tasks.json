@@ -86,6 +86,8 @@
       "goal": "Build the single v0 policy gate, structured access denial, append-only audit table, and hash-chain verifier.",
       "why": "The policy denial and audit ledger are the credibility moment for health-infra builders.",
       "allowedPaths": [
+        "package.json",
+        "drizzle/**",
         "packages/core/**",
         "packages/sdk/**",
         "apps/api/**",

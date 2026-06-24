@@ -25,6 +25,7 @@
     "seed": "docker compose up -d postgres && bun run scripts/seed/seed.ts",
     "smoke:demo": "bun run scripts/smoke/demo.ts",
     "smoke:offline": "bun run scripts/smoke/offline.ts",
+    "smoke:policy": "docker compose up -d postgres && bun run db:migrate && bun run seed && bun run scripts/smoke/policy.ts",
     "test": "bun test apps packages",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

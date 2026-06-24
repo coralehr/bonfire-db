@@ -18,4 +18,6 @@ export function getHealthStatus(): HealthStatus {
   };
 }
 
+export * from "./abac.js";
+export * from "./audit.js";
 export * from "./schema.js";

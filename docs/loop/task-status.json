@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-06-23T05:13:46.331Z",
+  "updatedAt": "2026-06-23T15:25:43Z",
   "tasks": [
     {
       "id": "BF-01",
@@ -13,21 +13,21 @@
     },
     {
       "id": "BF-02",
-      "status": "active",
+      "status": "passed",
       "attempts": 1,
       "branch": "loop/BF-02",
       "pr": "https://github.com/ticvision/bonfire-db/pull/2",
-      "greptile": null,
-      "notes": "Local PASS: BF-02 verify commands passed from a clean Postgres volume; scripts/loop/verify.sh passed; security scan found only intentional scanner-test PHI fixtures and example-domain seed emails."
+      "greptile": "5/5",
+      "notes": "Merged as PR #2 with CI PASS: Harness syntax, Bonfire verify, and Greptile 5/5 on BF-02."
     },
     {
       "id": "BF-03",
-      "status": "pending",
-      "attempts": 0,
-      "branch": null,
-      "pr": null,
+      "status": "active",
+      "attempts": 1,
+      "branch": "loop/BF-03",
+      "pr": "https://github.com/coralehr/bonfire-db/pull/3",
       "greptile": null,
-      "notes": ""
+      "notes": "PR updated after local PASS: patient actor self-link policy tests, ABAC/audit tests, smoke:policy from fresh Postgres volume, scripts/loop/verify.sh, synthetic scan, and compose health curl. Greptile skipped because this repo/org is not configured."
     },
     {
       "id": "BF-04",
