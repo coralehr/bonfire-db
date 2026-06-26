@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+.turbo/
+
+# TypeScript incremental build state
+*.tsbuildinfo
+
+# Test & coverage artifacts
+coverage/
+test-results/
+playwright-report/
+
+# Environment & secrets — never commit
+.env
+.env.*
+!.env.example
+
+# Data exports & private fixtures — never commit PHI
+exports/
+fixtures/private/
+
+# Logs & captured traces
+*.log
+*.trace
+*.har
+
+# Editor & OS noise
+.DS_Store
+.idea/
+
+# Local agent / tooling state
+.gstack/

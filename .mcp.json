@@ -1,0 +1,25 @@
+{
+  "mcpServers": {
+    "serena": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/oraios/serena",
+        "serena",
+        "start-mcp-server",
+        "--context",
+        "ide-assistant",
+        "--project-from-cwd"
+      ]
+    },
+    "ast-grep": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": ["--from", "git+https://github.com/ast-grep/ast-grep-mcp", "ast-grep-server"],
+      "env": {
+        "AST_GREP_CONFIG": "sgconfig.yml"
+      }
+    }
+  }
+}

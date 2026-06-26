@@ -1,0 +1,33 @@
+{
+  "$schema": "https://turborepo.dev/schema.json",
+  "globalDependencies": [
+    "bun.lock",
+    "tsconfig.base.json",
+    "tsconfig.json",
+    "eslint.config.ts",
+    "eslint.config.js"
+  ],
+  "globalEnv": ["CI"],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", "build/**", "**/*.tsbuildinfo"]
+    },
+    "typecheck": {
+      "dependsOn": ["^typecheck"],
+      "outputs": ["dist/**", "**/*.tsbuildinfo"]
+    },
+    "lint": {
+      "dependsOn": [],
+      "outputs": []
+    },
+    "test": {
+      "dependsOn": ["^build"],
+      "outputs": ["coverage/**"]
+    },
+    "gate": {
+      "dependsOn": ["typecheck", "lint", "test", "build"],
+      "cache": false
+    }
+  }
+}

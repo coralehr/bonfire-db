@@ -1,0 +1,83 @@
+# Bonfire DB — gitleaks secret-scanning configuration
+#
+# Extends the gitleaks built-in ruleset (AWS, GCP, Stripe, GitHub, Slack, JWT,
+# private keys, generic high-entropy, ...) and adds Bonfire-specific rules plus
+# allowlists tuned for a synthetic-only, local-first demo (no real PHI/secrets).
+#
+# Versions verified 2026-06-26: gitleaks v8.30.1 (config schema v8.19+:
+# plural [[allowlists]] / [[rules.allowlists]], regexTarget, `gitleaks dir|git`).
+#
+# CI (blocking gate):
+#   GITLEAKS_VERSION=8.30.1
+#   curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" | tar -xz -C /usr/local/bin gitleaks
+#   gitleaks dir . --config .gitleaks.toml --redact --exit-code 1 --verbose   # full tree
+#   gitleaks git . --config .gitleaks.toml --redact --exit-code 1             # git history (PRs)
+
+title = "Bonfire DB gitleaks config"
+
+[extend]
+# Inherit the maintained upstream ruleset; our [[rules]] below are additive.
+useDefault = true
+
+# ---------------------------------------------------------------------------
+# Custom rules (defense in depth on top of the defaults)
+# ---------------------------------------------------------------------------
+
+[[rules]]
+id = "bonfire-generic-assigned-secret"
+description = "Credential-shaped identifier assigned a long literal value"
+regex = '''(?i)\b(password|passwd|pwd|secret|api[_-]?key|access[_-]?key|secret[_-]?key|client[_-]?secret|auth[_-]?token|session[_-]?secret|jwt[_-]?secret|encryption[_-]?key|signing[_-]?key|private[_-]?key|passphrase)\b\s*[:=]\s*['"][^'"\s$]{12,}['"]'''
+keywords = ["password", "secret", "apikey", "api_key", "token", "private_key", "client_secret", "passphrase"]
+entropy = 3.5
+
+  [[rules.allowlists]]
+  description = "Ignore placeholders, env interpolation, and synthetic values"
+  regexTarget = "match"
+  regexes = [
+    '''(?i)(example|placeholder|changeme|your[-_ ]|redacted|dummy|sample|fixme|todo|synthetic|process\.env|import\.meta\.env|\$\{|<[^>]+>|xxxx+|\*{3,})''',
+  ]
+
+[[rules]]
+id = "bonfire-postgres-connection-uri"
+description = "Postgres connection URI with embedded credentials"
+regex = '''(?i)postgres(ql)?:\/\/[^:\/\s]+:[^@\/\s]+@[^\/\s:]+'''
+keywords = ["postgres://", "postgresql://"]
+
+  [[rules.allowlists]]
+  description = "Synthetic local demo credentials are allowed"
+  regexTarget = "match"
+  regexes = [
+    '''(?i)postgres(ql)?:\/\/(bonfire|postgres):(bonfire|postgres)@(localhost|127\.0\.0\.1|postgres)''',
+  ]
+
+# ---------------------------------------------------------------------------
+# Global allowlists — synthetic-only fixtures, generated artifacts, lockfiles.
+# Split by criterion type (paths vs regexes) so the AND/OR semantics are
+# unambiguous across gitleaks versions.
+# ---------------------------------------------------------------------------
+
+[[allowlists]]
+description = "Committed fixtures, generated artifacts, lockfiles, and docs are not secrets"
+paths = [
+  '''(^|/)bun\.lock$''',
+  '''(^|/)package-lock\.json$''',
+  '''(^|/)yarn\.lock$''',
+  '''(^|/)pnpm-lock\.yaml$''',
+  '''(^|/)seed/embeddings\.json$''',
+  '''(^|/)seed/[^/]+\.json$''',
+  '''(^|/)drizzle/[^/]+\.sql$''',
+  '''(^|/)docs/.*\.(md|html)$''',
+  '''(^|/)\.env\.example$''',
+  '''(^|/)node_modules/''',
+  '''(^|/)dist/''',
+  '''(^|/)(coverage|test-results|playwright-report)/''',
+]
+
+[[allowlists]]
+description = "Synthetic example.* identities and explicit non-secret markers"
+regexTarget = "line"
+regexes = [
+  '''@example\.(com|org|net)\b''',
+  '''(?i)\b(synthetic|placeholder|example|changeme|dummy|sample|redacted|fixture|test[-_]?(secret|token|key|value))\b''',
+]
+stopwords = ["example", "synthetic", "placeholder", "changeme", "redacted"]

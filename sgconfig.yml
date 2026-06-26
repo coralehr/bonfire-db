@@ -1,0 +1,21 @@
+# ast-grep project config (A6) — structural search + anti-slop gates.
+#
+# The same rules serve two roles:
+#   1. The deterministic CI gate (Stage 0/1 of the loop gate pipeline):
+#        bunx ast-grep scan -c sgconfig.yml        # fails on any error-severity finding
+#   2. The agent's structural search tool, surfaced over MCP (see .mcp.json),
+#      so makers/verifiers query the AST instead of grepping text.
+#
+# Validate the rules themselves (rules are tested like code):
+#        bunx ast-grep test -c sgconfig.yml --skip-snapshot-tests
+#
+# ast-grep respects .gitignore, so build output (dist, *.d.ts) and node_modules
+# are skipped automatically. Rules are authored per language: every rule has a
+# `TypeScript` document (.ts) and a `Tsx` document (.tsx) because ast-grep treats
+# the two grammars separately and a single rule cannot target both.
+
+ruleDirs:
+  - sgrules
+
+testConfigs:
+  - testDir: sgrule-tests

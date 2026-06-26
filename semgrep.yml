@@ -1,0 +1,349 @@
+# Bonfire DB — Semgrep security gate
+#
+# Static-analysis gate for AI-authored code. Targets the OWASP Top 10 patterns
+# that autonomous coding agents reproduce most often (injection, broken access
+# control / fail-open authorization, hardcoded secrets) plus two Bonfire-specific
+# healthcare rules:
+#   * no raw SQL built by string concatenation in MCP / tool / product code
+#   * authorization must be deny-by-default (no allow-by-default shape)
+#
+# Versions verified 2026-06-26: semgrep 1.168.0.
+#
+# CI (blocking gate, no inline suppressions honored):
+#   pip install semgrep==1.168.0
+#   semgrep scan --config semgrep.yml --error --strict --disable-nosemgrep --metrics=off .
+#
+# Severity is ERROR across the board: this is a gate, not advisory. Every rule is
+# either path-scoped or identifier-anchored to keep false positives near zero.
+
+rules:
+  # --------------------------------------------------------------------------
+  # A03:2021 Injection — SQL built by concatenation/interpolation into a sink.
+  # --------------------------------------------------------------------------
+  - id: bonfire-sql-injection-string-build
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >-
+      Possible SQL injection: a query is built with string concatenation or
+      template interpolation and handed to a database execution sink. Use
+      parameterized queries ($1, $2, ...) or the Drizzle / postgres.js `sql`
+      tagged template so values are bound, never inlined into the statement text.
+    metadata:
+      category: security
+      subcategory: [vuln]
+      confidence: HIGH
+      likelihood: HIGH
+      impact: HIGH
+      cwe:
+        - "CWE-89: Improper Neutralization of Special Elements used in an SQL Command ('SQL Injection')"
+      owasp:
+        - "A03:2021 - Injection"
+      references:
+        - https://owasp.org/Top10/A03_2021-Injection/
+        - https://orm.drizzle.team/docs/sql
+    patterns:
+      - pattern-either:
+          - pattern: $SINK.query(`...${...}...`)
+          - pattern: $SINK.query($A + ...)
+          - pattern: $SINK.execute(`...${...}...`)
+          - pattern: $SINK.execute($A + ...)
+          - pattern: $SINK.unsafe(`...${...}...`)
+          - pattern: $SINK.unsafe($A + ...)
+          - pattern: $SINK.raw(`...${...}...`)
+          - pattern: $SINK.raw($A + ...)
+    paths:
+      exclude:
+        - "**/*.test.ts"
+        - "**/*.test.tsx"
+        - "**/*.test.mjs"
+        - "**/*.test.js"
+        - "**/*.spec.ts"
+        - "**/*.spec.tsx"
+
+  # --------------------------------------------------------------------------
+  # A01:2021 Broken Access Control — FAIL-OPEN: an error path grants access.
+  # High-confidence form: an explicit "allow" decision returned from a catch
+  # block or a rejected-promise handler.
+  # --------------------------------------------------------------------------
+  - id: bonfire-authz-fail-open-grant-on-error
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >-
+      Fail-open authorization: an error handler returns an "allow"/granted
+      decision. Authorization must fail CLOSED — on any error the decision must
+      be "deny". Return a deny decision (or rethrow) from catch/`.catch` handlers.
+    metadata:
+      category: security
+      subcategory: [vuln]
+      confidence: HIGH
+      likelihood: MEDIUM
+      impact: HIGH
+      cwe:
+        - "CWE-636: Not Failing Securely ('Failing Open')"
+        - "CWE-285: Improper Authorization"
+      owasp:
+        - "A01:2021 - Broken Access Control"
+      references:
+        - https://owasp.org/Top10/A01_2021-Broken_Access_Control/
+        - https://cwe.mitre.org/data/definitions/636.html
+    patterns:
+      - pattern-either:
+          - pattern: |
+              try { ... } catch (...) { ... return { ..., decision: "allow", ... }; ... }
+          - pattern: |
+              try { ... } catch (...) { ... return { ..., allowed: true, ... }; ... }
+          - pattern: |
+              try { ... } catch (...) { ... return { ..., authorized: true, ... }; ... }
+          - pattern: |
+              try { ... } catch (...) { ... return { ..., granted: true, ... }; ... }
+          - pattern: $P.catch((...) => true)
+          - pattern: '$P.catch((...) => ({ ..., decision: "allow", ... }))'
+          - pattern: '$P.catch((...) => ({ ..., allowed: true, ... }))'
+          - pattern: '$P.catch((...) => ({ ..., authorized: true, ... }))'
+    paths:
+      exclude:
+        - "**/*.test.ts"
+        - "**/*.test.tsx"
+        - "**/*.test.mjs"
+        - "**/*.test.js"
+        - "**/*.spec.ts"
+
+  # --------------------------------------------------------------------------
+  # A01:2021 Broken Access Control — FAIL-OPEN heuristic: a catch inside an
+  # authorization-named function returns `true`.
+  # --------------------------------------------------------------------------
+  - id: bonfire-authz-fail-open-return-true
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >-
+      Fail-open authorization: an authorization function returns `true` from a
+      catch block. On error, deny. Return `false`/a deny decision or rethrow.
+    metadata:
+      category: security
+      subcategory: [vuln]
+      confidence: MEDIUM
+      likelihood: MEDIUM
+      impact: HIGH
+      cwe:
+        - "CWE-636: Not Failing Securely ('Failing Open')"
+      owasp:
+        - "A01:2021 - Broken Access Control"
+      references:
+        - https://owasp.org/Top10/A01_2021-Broken_Access_Control/
+    patterns:
+      - pattern: |
+          try { ... } catch (...) { ... return true; ... }
+      - pattern-either:
+          - pattern-inside: |
+              function $FN(...) { ... }
+          - pattern-inside: |
+              async function $FN(...) { ... }
+          - pattern-inside: |
+              const $FN = (...) => { ... }
+          - pattern-inside: |
+              const $FN = async (...) => { ... }
+          - pattern-inside: |
+              $FN(...) { ... }
+      - metavariable-regex:
+          metavariable: $FN
+          regex: '(?i)(authoriz|authz|can[a-z0-9_]*access|^allow|permit|grant|hasaccess|isallowed|isauthorized|checkpolicy|enforce|guard|verifyaccess|ensureaccess|checkauth)'
+    paths:
+      exclude:
+        - "**/*.test.ts"
+        - "**/*.test.tsx"
+        - "**/*.test.mjs"
+        - "**/*.test.js"
+        - "**/*.spec.ts"
+
+  # --------------------------------------------------------------------------
+  # A07:2021 Identification & Authentication Failures / A05 Misconfiguration —
+  # Hardcoded secret assigned to a sensitive identifier.
+  # --------------------------------------------------------------------------
+  - id: bonfire-hardcoded-secret
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >-
+      Hardcoded secret: a credential-shaped identifier is assigned a string
+      literal. Load secrets from the environment (process.env / a secret manager),
+      never commit them. (gitleaks scans the rest of the tree.)
+    metadata:
+      category: security
+      subcategory: [vuln]
+      confidence: MEDIUM
+      likelihood: MEDIUM
+      impact: HIGH
+      cwe:
+        - "CWE-798: Use of Hard-coded Credentials"
+      owasp:
+        - "A07:2021 - Identification and Authentication Failures"
+      references:
+        - https://owasp.org/Top10/A07_2021-Identification_and_Authentication_Failures/
+        - https://cwe.mitre.org/data/definitions/798.html
+    patterns:
+      - pattern-either:
+          - pattern: const $NAME = "$VAL"
+          - pattern: let $NAME = "$VAL"
+          - pattern: var $NAME = "$VAL"
+          - pattern: $NAME = "$VAL"
+          - pattern: $OBJ.$NAME = "$VAL"
+          - pattern: "{ ..., $NAME: \"$VAL\", ... }"
+      - metavariable-regex:
+          metavariable: $NAME
+          regex: '(?i)^.*(password|passwd|pwd|secret|apikey|api_key|access_key|secret_key|client_secret|token|auth_token|private_key|encryption_key|signing_key|session_secret|jwt_secret|credential|passphrase)$'
+      - metavariable-regex:
+          metavariable: $VAL
+          regex: '^(?!.*(\$\{|process\.env|import\.meta\.env|example|placeholder|changeme|your[-_ ]|redacted|dummy|sample|fixme|todo|<[^>]+>|xxxx+|\*{3,}|\.{3,})).{8,}$'
+    paths:
+      exclude:
+        - "**/*.test.ts"
+        - "**/*.test.tsx"
+        - "**/*.test.mjs"
+        - "**/*.test.js"
+        - "**/*.spec.ts"
+
+  # --------------------------------------------------------------------------
+  # A07:2021 — Private key material committed in source.
+  # --------------------------------------------------------------------------
+  - id: bonfire-private-key-in-source
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >-
+      Private key material in source. Never embed PEM/OpenSSH private keys in
+      code. Move to a secret manager and rotate the exposed key immediately.
+    metadata:
+      category: security
+      subcategory: [vuln]
+      confidence: HIGH
+      likelihood: LOW
+      impact: HIGH
+      cwe:
+        - "CWE-798: Use of Hard-coded Credentials"
+      owasp:
+        - "A07:2021 - Identification and Authentication Failures"
+      references:
+        - https://owasp.org/Top10/A07_2021-Identification_and_Authentication_Failures/
+    patterns:
+      - pattern-regex: '-----BEGIN (RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----'
+
+  # --------------------------------------------------------------------------
+  # HEALTHCARE CUSTOM RULE 1 — No raw SQL built by string concatenation in
+  # MCP / tool / product code. AGENTS.md forbids exposing a raw-SQL tool through
+  # the Bonfire product surface; this enforces it at the call site. Seed and
+  # migration dev scripts (scripts/**, seed/**, drizzle/**) are intentionally
+  # out of scope — they build synthetic SQL behind escaping helpers, not tools.
+  # --------------------------------------------------------------------------
+  - id: bonfire-mcp-tool-raw-sql-concat
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >-
+      Raw SQL assembled by string concatenation/interpolation in MCP/tool/product
+      code. No raw-SQL tool may be exposed on the Bonfire product surface, and all
+      data access must be parameterized. Use the Drizzle query builder or the `sql`
+      tagged template (bound params) instead of building statement text by hand.
+    metadata:
+      category: security
+      subcategory: [vuln]
+      confidence: MEDIUM
+      likelihood: HIGH
+      impact: HIGH
+      cwe:
+        - "CWE-89: Improper Neutralization of Special Elements used in an SQL Command ('SQL Injection')"
+      owasp:
+        - "A03:2021 - Injection"
+      references:
+        - https://orm.drizzle.team/docs/sql
+        - https://modelcontextprotocol.io/docs/concepts/tools
+    patterns:
+      - pattern-either:
+          - patterns:
+              - pattern: $L + $R
+              - metavariable-regex:
+                  metavariable: $L
+                  regex: '(?i)["''`]\s*(select\s|insert\s+into\s|update\s|delete\s+from\s|drop\s+table\s|alter\s+table\s|truncate\s|create\s+table\s|merge\s+into\s|union\s+select\s)'
+          - patterns:
+              - pattern: $L + $R
+              - metavariable-regex:
+                  metavariable: $R
+                  regex: '(?i)["''`]\s*(select\s|insert\s+into\s|update\s|delete\s+from\s|drop\s+table\s|alter\s+table\s|truncate\s|create\s+table\s|merge\s+into\s|union\s+select\s)'
+          - pattern-regex: '(?i)`[^`]*\b(select|insert\s+into|update|delete|drop\s+table|alter\s+table|truncate|create\s+table|merge|union\s+select|where|from|join)\b[^`]*\$\{[^`]*`'
+    paths:
+      include:
+        - "packages/core/**"
+        - "packages/mcp/**"
+        - "packages/sdk/**"
+        - "apps/api/**"
+        - "apps/demo/**"
+        - "**/mcp/**"
+        - "**/tools/**"
+        - "**/tool/**"
+        - "**/*tool*.ts"
+        - "**/*tool*.tsx"
+      exclude:
+        - "scripts/**"
+        - "seed/**"
+        - "drizzle/**"
+        - "**/*.test.ts"
+        - "**/*.test.tsx"
+        - "**/*.test.mjs"
+        - "**/*.test.js"
+        - "**/*.spec.ts"
+
+  # --------------------------------------------------------------------------
+  # HEALTHCARE CUSTOM RULE 2 — Authorization must be DENY-BY-DEFAULT. Flags the
+  # allow-by-default shape (a mutable decision initialized to allow/true that
+  # later gets flipped to deny), which fails open whenever a check is skipped.
+  # The safe Bonfire shape derives the decision from an explicit conjunction of
+  # checks, e.g. `const decision = checks.every(c => c.passed) ? "allow" : "deny"`.
+  # --------------------------------------------------------------------------
+  - id: bonfire-authz-allow-by-default
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >-
+      Allow-by-default authorization. A decision variable is initialized to
+      allow/true and presumably narrowed later — this fails open if any check is
+      skipped or throws. Authorization must be deny-by-default: start from deny
+      and require an explicit conjunction of checks to reach allow.
+    metadata:
+      category: security
+      subcategory: [vuln]
+      confidence: MEDIUM
+      likelihood: MEDIUM
+      impact: HIGH
+      cwe:
+        - "CWE-1188: Insecure Default Initialization of Resource"
+        - "CWE-285: Improper Authorization"
+      owasp:
+        - "A01:2021 - Broken Access Control"
+      references:
+        - https://owasp.org/Top10/A01_2021-Broken_Access_Control/
+        - https://cwe.mitre.org/data/definitions/636.html
+    patterns:
+      - pattern-either:
+          - pattern: let $V = true
+          - pattern: var $V = true
+          - pattern: 'let $V: $T = true'
+          - pattern: let $V = "allow"
+          - pattern: var $V = "allow"
+      - metavariable-regex:
+          metavariable: $V
+          regex: '(?i)^(allow|allowed|allows|authorize|authorized|authz|granted|grant|permit|permitted|access|isallowed|canaccess|hasaccess|isauthorized|ispermitted|decision|verdict)$'
+    paths:
+      include:
+        - "packages/core/**"
+        - "packages/mcp/**"
+        - "packages/sdk/**"
+        - "apps/api/**"
+        - "**/abac*"
+        - "**/authz*"
+        - "**/auth/**"
+        - "**/policy*"
+        - "**/policies/**"
+        - "**/access*"
+        - "**/guard*"
+        - "**/permission*"
+      exclude:
+        - "**/*.test.ts"
+        - "**/*.test.tsx"
+        - "**/*.test.mjs"
+        - "**/*.test.js"
+        - "**/*.spec.ts"

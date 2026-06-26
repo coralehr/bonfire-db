@@ -1,0 +1,64 @@
+# Fail-open authorization: a catch block that grants access on error.
+# Authz is DEFAULT-DENY — anything that is not an explicit allow, INCLUDING an
+# error, must deny. This rule catches the two dangerous shapes inside a catch:
+#   - `return true`                         (bare boolean allow)
+#   - `return { allow: true }` / `{ granted: true }` / ...  (decision object)
+# Fail-closed shapes (`return false`, `{ allow: false }`) and success/Result
+# shapes (`{ ok: false }`) are intentionally NOT matched.
+id: no-fail-open-auth
+language: TypeScript
+severity: error
+message: Catch block returns an allow/true decision — this fails open.
+note: |
+  On error an authorization path MUST deny. Returning `true` or an `{ allow: true }`
+  style decision from a catch grants access whenever the check itself throws.
+  Return the default-deny value (`false` / `{ allow: false }`) or rethrow so the
+  caller's default-deny boundary handles it.
+metadata:
+  slop-pattern: fail-open
+  gate-stage: 1
+rule:
+  kind: catch_clause
+  has:
+    stopBy: end
+    any:
+      - pattern: "return true"
+      - all:
+          - pattern:
+              context: "({ $KEY: true })"
+              selector: pair
+          - inside:
+              stopBy: end
+              kind: return_statement
+constraints:
+  KEY:
+    regex: "^(allow|allowed|isAllowed|authorized|authorised|granted|permitted|hasAccess|access)$"
+---
+id: no-fail-open-auth-tsx
+language: Tsx
+severity: error
+message: Catch block returns an allow/true decision — this fails open.
+note: |
+  On error an authorization path MUST deny. Returning `true` or an `{ allow: true }`
+  style decision from a catch grants access whenever the check itself throws.
+  Return the default-deny value (`false` / `{ allow: false }`) or rethrow so the
+  caller's default-deny boundary handles it.
+metadata:
+  slop-pattern: fail-open
+  gate-stage: 1
+rule:
+  kind: catch_clause
+  has:
+    stopBy: end
+    any:
+      - pattern: "return true"
+      - all:
+          - pattern:
+              context: "({ $KEY: true })"
+              selector: pair
+          - inside:
+              stopBy: end
+              kind: return_statement
+constraints:
+  KEY:
+    regex: "^(allow|allowed|isAllowed|authorized|authorised|granted|permitted|hasAccess|access)$"

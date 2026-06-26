@@ -1,0 +1,36 @@
+# Banned-construct example: dynamic code execution.
+# `eval(...)` and `new Function(...)` are code-injection sinks and have no place
+# in healthcare infrastructure. Use this rule as the TEMPLATE for banning any
+# construct structurally — add `pattern:` entries to the `any:` list (e.g.
+# `child_process.exec($$$)`, `dangerouslySetInnerHTML`, `@ts-ignore` comments).
+id: no-dynamic-code-eval
+language: TypeScript
+severity: error
+message: Dynamic code execution (eval / new Function) is banned.
+note: |
+  `eval` and `new Function` execute arbitrary strings as code — a code-injection
+  sink. Express the intent with real code paths (a lookup table, a parser, a typed
+  dispatch) instead.
+metadata:
+  slop-pattern: banned-construct
+  gate-stage: 1
+rule:
+  any:
+    - pattern: "eval($$$ARGS)"
+    - pattern: "new Function($$$ARGS)"
+---
+id: no-dynamic-code-eval-tsx
+language: Tsx
+severity: error
+message: Dynamic code execution (eval / new Function) is banned.
+note: |
+  `eval` and `new Function` execute arbitrary strings as code — a code-injection
+  sink. Express the intent with real code paths (a lookup table, a parser, a typed
+  dispatch) instead.
+metadata:
+  slop-pattern: banned-construct
+  gate-stage: 1
+rule:
+  any:
+    - pattern: "eval($$$ARGS)"
+    - pattern: "new Function($$$ARGS)"

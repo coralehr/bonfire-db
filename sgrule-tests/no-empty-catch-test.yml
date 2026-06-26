@@ -1,0 +1,14 @@
+# Behaviour tests for no-empty-catch. Run: bunx ast-grep test --skip-snapshot-tests
+# `valid` snippets must NOT match; `invalid` snippets MUST match.
+# Covers both the TypeScript rule and (by identical rule body) its Tsx variant.
+id: no-empty-catch
+valid:
+  - |
+    try { risky(); } catch (e) { logger.error(e); }
+  - |
+    try { risky(); } catch (e) { return fallback; }
+invalid:
+  - |
+    try { risky(); } catch (e) { }
+  - |
+    try { risky(); } catch { }

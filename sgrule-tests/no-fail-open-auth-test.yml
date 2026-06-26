@@ -1,0 +1,16 @@
+# Behaviour tests for no-fail-open-auth. Run: bunx ast-grep test --skip-snapshot-tests
+id: no-fail-open-auth
+valid:
+  - |
+    function d() { try { return decide(); } catch (e) { return { allow: false }; } }
+  - |
+    function o() { try { return decide(); } catch (e) { return { ok: false }; } }
+  - |
+    function r() { try { return decide(); } catch (e) { return false; } }
+invalid:
+  - |
+    function a() { try { return c(); } catch (e) { return true; } }
+  - |
+    function b() { try { return c(); } catch (e) { return { allow: true }; } }
+  - |
+    function g() { try { return c(); } catch (e) { return { reason: "x", granted: true }; } }

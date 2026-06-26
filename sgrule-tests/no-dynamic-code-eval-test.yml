@@ -1,0 +1,12 @@
+# Behaviour tests for no-dynamic-code-eval. Run: bunx ast-grep test --skip-snapshot-tests
+id: no-dynamic-code-eval
+valid:
+  - |
+    const r = evaluate(2);
+  - |
+    const f = compute(1, 2);
+invalid:
+  - |
+    const r = eval("1+1");
+  - |
+    const g = new Function("return 1");

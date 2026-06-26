@@ -1,0 +1,11 @@
+# Bun configuration for the bonfire-db workspace.
+# Reference: https://bun.com/docs/runtime/bunfig
+
+[install]
+# Pin the public npm registry explicitly (supply-chain hygiene for a
+# healthcare-infrastructure repo: dependencies resolve from one known source).
+registry = "https://registry.npmjs.org/"
+
+# Write exact versions on `bun add` so the dependency graph stays reproducible.
+# CI installs with `--frozen-lockfile` to fail the build on any lockfile drift.
+exact = true

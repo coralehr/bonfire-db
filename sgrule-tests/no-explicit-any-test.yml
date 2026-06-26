@@ -1,0 +1,14 @@
+# Behaviour tests for no-explicit-any. Run: bunx ast-grep test --skip-snapshot-tests
+id: no-explicit-any
+valid:
+  - |
+    const x: unknown = 1;
+  - |
+    const y: string = "a";
+invalid:
+  - |
+    const x: any = 1;
+  - |
+    const y = z as any;
+  - |
+    function f(p: any) { return p; }

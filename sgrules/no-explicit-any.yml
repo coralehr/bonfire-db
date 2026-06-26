@@ -1,0 +1,32 @@
+# Explicit `any` defeats the type system. Catches every usage of the `any`
+# keyword in type position: `: any`, `as any`, `<any>`, `any[]`, `Array<any>`,
+# `<T = any>`, return types, etc. `unknown` (narrow at the edge) is not flagged.
+# Defence-in-depth alongside typescript-eslint `no-explicit-any`; ast-grep also
+# fires in editors/CI without the TS type-checker being loaded.
+id: no-explicit-any
+language: TypeScript
+severity: error
+message: Explicit "any" defeats type safety.
+note: |
+  Replace `any` with a precise type, a discriminated union, or `unknown` plus
+  narrowing / a Zod parse at the boundary. The repo bar forbids `any` everywhere.
+metadata:
+  slop-pattern: any-escape
+  gate-stage: 1
+rule:
+  kind: predefined_type
+  regex: "^any$"
+---
+id: no-explicit-any-tsx
+language: Tsx
+severity: error
+message: Explicit "any" defeats type safety.
+note: |
+  Replace `any` with a precise type, a discriminated union, or `unknown` plus
+  narrowing / a Zod parse at the boundary. The repo bar forbids `any` everywhere.
+metadata:
+  slop-pattern: any-escape
+  gate-stage: 1
+rule:
+  kind: predefined_type
+  regex: "^any$"

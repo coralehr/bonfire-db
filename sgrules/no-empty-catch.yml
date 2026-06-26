@@ -1,0 +1,45 @@
+# Empty catch blocks silently swallow errors — the seed of fail-open behaviour.
+# Matches both `catch (e) {}` and the optional-binding `catch {}` form.
+# An empty `{}` in the pattern matches ONLY empty blocks; a catch that logs,
+# rethrows, or returns a fallback is not flagged.
+id: no-empty-catch
+language: TypeScript
+severity: error
+message: Empty catch block silently swallows the error.
+note: |
+  A swallowed error hides failures and is the most common path to accidental
+  fail-open behaviour. Handle it: log with context, rethrow, return a typed
+  fail-closed Result, or map it to a BonfireError carrying a stable `code`.
+  A comment-only catch still counts as empty.
+metadata:
+  slop-pattern: swallowed-errors
+  gate-stage: 1
+rule:
+  any:
+    - pattern:
+        context: "try {} catch ($ERR) {}"
+        selector: catch_clause
+    - pattern:
+        context: "try {} catch {}"
+        selector: catch_clause
+---
+id: no-empty-catch-tsx
+language: Tsx
+severity: error
+message: Empty catch block silently swallows the error.
+note: |
+  A swallowed error hides failures and is the most common path to accidental
+  fail-open behaviour. Handle it: log with context, rethrow, return a typed
+  fail-closed Result, or map it to a BonfireError carrying a stable `code`.
+  A comment-only catch still counts as empty.
+metadata:
+  slop-pattern: swallowed-errors
+  gate-stage: 1
+rule:
+  any:
+    - pattern:
+        context: "try {} catch ($ERR) {}"
+        selector: catch_clause
+    - pattern:
+        context: "try {} catch {}"
+        selector: catch_clause

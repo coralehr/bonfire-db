@@ -1,0 +1,22 @@
+{
+  "path": ["."],
+  "gitignore": true,
+  "threshold": 0,
+  "minTokens": 50,
+  "minLines": 5,
+  "format": ["javascript", "jsx", "typescript", "tsx"],
+  "formatsExts": "javascript:js,mjs,cjs;typescript:ts,mts,cts",
+  "reporters": ["consoleFull"],
+  "ignore": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/build/**",
+    "**/coverage/**",
+    "**/report/**",
+    "**/.jscpd-report/**",
+    "**/__snapshots__/**",
+    "**/*.d.ts",
+    "**/*.min.js",
+    "**/*.sql"
+  ]
+}
