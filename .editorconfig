@@ -1,0 +1,18 @@
+# https://editorconfig.org — anchors editor behavior before Biome runs.
+# Mirrors biome.json (2-space indent, LF, final newline, trimmed trailing space).
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.md]
+trim_trailing_whitespace = false
+
+[LICENSE]
+indent_size = unset
+trim_trailing_whitespace = false

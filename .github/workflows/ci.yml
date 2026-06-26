@@ -7,53 +7,96 @@ on:
     branches: [main]
   workflow_dispatch: {}
 
-# Cancel superseded runs on the same ref (newest wins) so parallel pushes do not
-# pile up — but never cancel a verification run on main, where every commit to the
-# production branch must be fully verified.
+# Cancel superseded runs on the same ref (newest wins) — but never cancel a
+# verification run on main, where every commit must be fully verified.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
-# Least privilege: CI only reads the repository. No auto-merge, no deploy, no PR
-# writes — a human gates every mutation (loop-harness-plan.md, A4).
+# Least privilege: CI only reads. No auto-merge, no deploy, no PR writes — a
+# human gates every mutation (loop-harness-plan.md, A4).
 permissions:
   contents: read
 
 env:
   TURBO_TELEMETRY_DISABLED: "1"
   DO_NOT_TRACK: "1"
+  BUN_VERSION: "1.3.14"
 
 jobs:
   # ---------------------------------------------------------------------------
-  # BLOCKING — deterministic gate stack, run through turbo on AFFECTED packages.
-  # tsc -b (typecheck), eslint strict (lint), tests, and build must all pass.
+  # BLOCKING — whole-tree static gates. Each runs a ROOT command over the entire
+  # tree, NOT a per-package turbo task, so a gate can never silently pass because
+  # a package forgot to declare its script (the fail-open-by-omission class).
   # ---------------------------------------------------------------------------
-  gate:
-    name: gate / ${{ matrix.task }}
+  static:
+    name: static / ${{ matrix.gate }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        task: [typecheck, lint, test, build]
-    env:
-      TURBO_CACHE_DIR: .turbo
+        gate: [typecheck, lint, format, structural, boundaries]
     steps:
-      - name: Checkout (full history for affected detection)
-        uses: actions/checkout@v7
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-      - name: Restore turbo cache
-        uses: actions/cache@v4
+      - uses: oven-sh/setup-bun@v2
         with:
-          path: .turbo
-          key: turbo-${{ runner.os }}-${{ matrix.task }}-${{ github.sha }}
-          restore-keys: |
-            turbo-${{ runner.os }}-${{ matrix.task }}-
-      - name: Run ${{ matrix.task }}
+          bun-version: "1.3.14"
+      - run: bun install --frozen-lockfile
+      - name: Run ${{ matrix.gate }}
+        env:
+          GATE: ${{ matrix.gate }}
+        run: |
+          set -euo pipefail
+          case "$GATE" in
+            typecheck)
+              bunx tsc -b
+              ;;
+            lint)
+              bunx eslint .
+              ;;
+            format)
+              bunx biome ci .
+              ;;
+            structural)
+              # ast-grep doubles as a slop gate: validate the rules, then scan.
+              bunx ast-grep test --skip-snapshot-tests
+              bunx ast-grep scan
+              ;;
+            boundaries)
+              DIRS=""
+              for d in loop packages apps drizzle seed scripts; do
+                [ -d "$d" ] && DIRS="$DIRS $d"
+              done
+              if [ -z "$DIRS" ]; then
+                echo "no source directories yet; nothing to cruise"
+              else
+                bunx depcruise $DIRS --config .dependency-cruiser.cjs
+              fi
+              ;;
+          esac
+
+  # ---------------------------------------------------------------------------
+  # BLOCKING — build + test via turbo on AFFECTED packages (where affected-only
+  # genuinely pays; correctness gates above always run whole-tree).
+  # ---------------------------------------------------------------------------
+  build-test:
+    name: build-test / ${{ matrix.task }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        task: [build, test]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.14"
+      - run: bun install --frozen-lockfile
+      - name: turbo ${{ matrix.task }} (affected)
         env:
           TASK: ${{ matrix.task }}
           BASE_REF: ${{ github.base_ref }}
@@ -61,18 +104,15 @@ jobs:
           set -euo pipefail
           if [ -n "${BASE_REF:-}" ]; then
             git fetch --no-tags --quiet origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
-            echo "::group::turbo run ${TASK} — affected since origin/${BASE_REF}"
-            bunx turbo run "${TASK}" --filter="...[origin/${BASE_REF}]" --cache-dir=.turbo
-            echo "::endgroup::"
+            bunx turbo run "${TASK}" --filter="...[origin/${BASE_REF}]"
           else
-            echo "::group::turbo run ${TASK} — full run (non-PR event)"
-            bunx turbo run "${TASK}" --cache-dir=.turbo
-            echo "::endgroup::"
+            bunx turbo run "${TASK}"
           fi
 
   # ---------------------------------------------------------------------------
-  # BLOCKING — static analysis (Semgrep). Curated low-noise baseline plus any
-  # repo-local rules; a finding fails the build.
+  # BLOCKING — static analysis (Semgrep). Inline suppressions are DISABLED
+  # (--disable-nosemgrep) to match the eslint no-inline-config posture, and
+  # --strict fails on unparseable files instead of silently skipping them.
   # ---------------------------------------------------------------------------
   semgrep:
     name: semgrep
@@ -80,19 +120,17 @@ jobs:
     container:
       image: semgrep/semgrep:1.168.0
     steps:
-      - name: Checkout
-        uses: actions/checkout@v7
+      - uses: actions/checkout@v7
       - name: Semgrep scan
         shell: sh
         run: |
           set -eu
-          CONFIGS="--config p/default"
-          if [ -d .semgrep ]; then CONFIGS="$CONFIGS --config .semgrep"; fi
-          if [ -f semgrep.yml ]; then CONFIGS="$CONFIGS --config semgrep.yml"; fi
-          if [ -f .semgrep.yml ]; then CONFIGS="$CONFIGS --config .semgrep.yml"; fi
-          # Word-splitting on $CONFIGS is intentional (multiple --config flags).
-          semgrep scan $CONFIGS \
+          semgrep scan \
+            --config semgrep.yml \
+            --config p/default \
             --error \
+            --strict \
+            --disable-nosemgrep \
             --metrics off \
             --exclude node_modules \
             --exclude dist \
@@ -101,15 +139,14 @@ jobs:
             --exclude coverage
 
   # ---------------------------------------------------------------------------
-  # BLOCKING — secret scanning (gitleaks CLI, pinned + checksum-verified). Run as
-  # the raw binary (not the action) so it stays license-free under an org account.
+  # BLOCKING — secret scanning (gitleaks CLI, pinned + checksum-verified, explicit
+  # config). Scans working tree AND git history.
   # ---------------------------------------------------------------------------
   secret-scan:
     name: secret-scan (gitleaks)
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout (full history)
-        uses: actions/checkout@v7
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Install gitleaks (pinned + checksum-verified)
@@ -123,13 +160,13 @@ jobs:
           echo "${GITLEAKS_SHA256}  gitleaks.tar.gz" | sha256sum -c -
           tar -xzf gitleaks.tar.gz gitleaks
           rm -f gitleaks.tar.gz
-      - name: Scan working tree for secrets
-        run: ./gitleaks dir . --redact --no-banner --exit-code 1
-      - name: Scan git history for secrets
-        run: ./gitleaks git . --redact --no-banner --exit-code 1
+      - name: Scan working tree
+        run: ./gitleaks dir . --config .gitleaks.toml --redact --no-banner --exit-code 1
+      - name: Scan git history
+        run: ./gitleaks git . --config .gitleaks.toml --redact --no-banner --exit-code 1
 
   # ---------------------------------------------------------------------------
-  # ADVISORY (Phase-1 bring-up) — these report but never block. They graduate to
+  # ADVISORY (Phase-1 bring-up) — report but never block. They graduate to
   # BLOCKING by the end of Phase 2 (loop-harness-plan.md, T6).
   # ---------------------------------------------------------------------------
   advisory:
@@ -139,14 +176,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        tool: [knip, jscpd, dependency-cruiser]
+        tool: [knip, jscpd]
     steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.14"
+      - run: bun install --frozen-lockfile
       - name: Run ${{ matrix.tool }}
         env:
           TOOL: ${{ matrix.tool }}
@@ -158,16 +194,5 @@ jobs:
               ;;
             jscpd)
               bunx jscpd . --ignore "**/node_modules/**,**/dist/**,**/build/**,**/.turbo/**,**/coverage/**"
-              ;;
-            dependency-cruiser)
-              DIRS=""
-              for d in loop packages apps; do
-                [ -d "$d" ] && DIRS="$DIRS $d"
-              done
-              if [ -z "$DIRS" ]; then
-                echo "No source directories present yet; nothing to cruise."
-                exit 0
-              fi
-              bunx depcruise $DIRS
               ;;
           esac

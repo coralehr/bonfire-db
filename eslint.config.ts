@@ -73,6 +73,7 @@ export default defineConfig(
       ],
       "no-empty": ["error", { allowEmptyCatch: false }],
       "no-unreachable": "error",
+      eqeqeq: ["error", "always", { null: "ignore" }],
       // Superseded by the type-aware @typescript-eslint/no-magic-numbers.
       "no-magic-numbers": "off"
     }
@@ -224,5 +225,12 @@ export default defineConfig(
       "max-lines-per-function": "off",
       "ai-guardrails/max-file-lines": "off"
     }
+  },
+  {
+    // Product library code must not ship console noise; the loop harness/CLI and
+    // operational scripts may log (they ARE the console surface).
+    name: "bonfire/no-console-in-product",
+    files: ["packages/**/*.{ts,tsx,mts,cts}"],
+    rules: { "no-console": "error" }
   }
 );

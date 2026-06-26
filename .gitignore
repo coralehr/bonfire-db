@@ -34,3 +34,26 @@ fixtures/private/
 
 # Local agent / tooling state
 .gstack/
+
+# Key & certificate material — never commit
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+id_rsa*
+
+# Data dumps & tabular exports — PHI risk; track synthetic seed/migrations explicitly
+*.csv
+*.tsv
+*.sql
+*.parquet
+*.ndjson
+*.xlsx
+!drizzle/**/*.sql
+!seed/**/*.sql
+
+# Other credential files
+.envrc
+*credentials*
+secrets.*

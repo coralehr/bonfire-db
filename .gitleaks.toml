@@ -64,8 +64,6 @@ paths = [
   '''(^|/)yarn\.lock$''',
   '''(^|/)pnpm-lock\.yaml$''',
   '''(^|/)seed/embeddings\.json$''',
-  '''(^|/)seed/[^/]+\.json$''',
-  '''(^|/)drizzle/[^/]+\.sql$''',
   '''(^|/)docs/.*\.(md|html)$''',
   '''(^|/)\.env\.example$''',
   '''(^|/)node_modules/''',
@@ -73,11 +71,14 @@ paths = [
   '''(^|/)(coverage|test-results|playwright-report)/''',
 ]
 
+# RFC example/synthetic EMAIL domains only. Deliberately narrow: an email domain
+# cannot smuggle a real AWS/Stripe/GitHub secret past the upstream detectors, unlike
+# a broad word match. Do NOT re-add a global word allowlist (synthetic|example|
+# sample|test...) — it neuters EVERY rule on any line containing those words, which
+# is a trivial, self-discoverable bypass. Scope synthetic-data exemptions to PATHS.
 [[allowlists]]
-description = "Synthetic example.* identities and explicit non-secret markers"
+description = "RFC example email domains are never real credentials"
 regexTarget = "line"
 regexes = [
   '''@example\.(com|org|net)\b''',
-  '''(?i)\b(synthetic|placeholder|example|changeme|dummy|sample|redacted|fixture|test[-_]?(secret|token|key|value))\b''',
 ]
-stopwords = ["example", "synthetic", "placeholder", "changeme", "redacted"]
