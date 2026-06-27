@@ -13,4 +13,5 @@ export function loopManifest(version: string): LoopManifest {
   return { name: LOOP_PACKAGE, version };
 }
 
+export * from "./agents/index.js";
 export * from "./contracts/index.js";

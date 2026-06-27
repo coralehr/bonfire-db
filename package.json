@@ -17,7 +17,8 @@
     "lint": "eslint .",
     "format": "biome check --write .",
     "test": "turbo run test",
-    "gate": "turbo run gate"
+    "gate": "turbo run gate",
+    "gen:agents": "bun run loop/src/agents/write.ts"
   },
   "devDependencies": {
     "@ast-grep/cli": "^0.44.0",
