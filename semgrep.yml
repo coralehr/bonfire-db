@@ -9,9 +9,9 @@
 #
 # Versions verified 2026-06-26: semgrep 1.168.0.
 #
-# CI (blocking gate, no inline suppressions honored):
+# CI (blocking gate; inline // nosemgrep is blocked by the static/suppressions gate):
 #   pip install semgrep==1.168.0
-#   semgrep scan --config semgrep.yml --error --strict --disable-nosemgrep --metrics=off .
+#   semgrep scan --config semgrep.yml --error --strict --metrics=off .
 #
 # Severity is ERROR across the board: this is a gate, not advisory. Every rule is
 # either path-scoped or identifier-anchored to keep false positives near zero.
@@ -61,99 +61,12 @@ rules:
         - "**/*.spec.tsx"
 
   # --------------------------------------------------------------------------
-  # A01:2021 Broken Access Control — FAIL-OPEN: an error path grants access.
-  # High-confidence form: an explicit "allow" decision returned from a catch
-  # block or a rejected-promise handler.
+  # A01:2021 Broken Access Control — FAIL-OPEN is enforced STRUCTURALLY by the
+  # ast-grep rule `no-fail-open-auth` (sgrules/, TS-native via tree-sitter, unit
+  # tested, run in the `static / structural` gate). semgrep's JS pattern engine
+  # cannot parse the `catch (...)` shapes those rules needed, so fail-open
+  # detection lives in ast-grep, not here. Deny-by-default is still checked below.
   # --------------------------------------------------------------------------
-  - id: bonfire-authz-fail-open-grant-on-error
-    languages: [typescript, javascript]
-    severity: ERROR
-    message: >-
-      Fail-open authorization: an error handler returns an "allow"/granted
-      decision. Authorization must fail CLOSED — on any error the decision must
-      be "deny". Return a deny decision (or rethrow) from catch/`.catch` handlers.
-    metadata:
-      category: security
-      subcategory: [vuln]
-      confidence: HIGH
-      likelihood: MEDIUM
-      impact: HIGH
-      cwe:
-        - "CWE-636: Not Failing Securely ('Failing Open')"
-        - "CWE-285: Improper Authorization"
-      owasp:
-        - "A01:2021 - Broken Access Control"
-      references:
-        - https://owasp.org/Top10/A01_2021-Broken_Access_Control/
-        - https://cwe.mitre.org/data/definitions/636.html
-    patterns:
-      - pattern-either:
-          - pattern: |
-              try { ... } catch (...) { ... return { ..., decision: "allow", ... }; ... }
-          - pattern: |
-              try { ... } catch (...) { ... return { ..., allowed: true, ... }; ... }
-          - pattern: |
-              try { ... } catch (...) { ... return { ..., authorized: true, ... }; ... }
-          - pattern: |
-              try { ... } catch (...) { ... return { ..., granted: true, ... }; ... }
-          - pattern: $P.catch((...) => true)
-          - pattern: '$P.catch((...) => ({ ..., decision: "allow", ... }))'
-          - pattern: '$P.catch((...) => ({ ..., allowed: true, ... }))'
-          - pattern: '$P.catch((...) => ({ ..., authorized: true, ... }))'
-    paths:
-      exclude:
-        - "**/*.test.ts"
-        - "**/*.test.tsx"
-        - "**/*.test.mjs"
-        - "**/*.test.js"
-        - "**/*.spec.ts"
-
-  # --------------------------------------------------------------------------
-  # A01:2021 Broken Access Control — FAIL-OPEN heuristic: a catch inside an
-  # authorization-named function returns `true`.
-  # --------------------------------------------------------------------------
-  - id: bonfire-authz-fail-open-return-true
-    languages: [typescript, javascript]
-    severity: ERROR
-    message: >-
-      Fail-open authorization: an authorization function returns `true` from a
-      catch block. On error, deny. Return `false`/a deny decision or rethrow.
-    metadata:
-      category: security
-      subcategory: [vuln]
-      confidence: MEDIUM
-      likelihood: MEDIUM
-      impact: HIGH
-      cwe:
-        - "CWE-636: Not Failing Securely ('Failing Open')"
-      owasp:
-        - "A01:2021 - Broken Access Control"
-      references:
-        - https://owasp.org/Top10/A01_2021-Broken_Access_Control/
-    patterns:
-      - pattern: |
-          try { ... } catch (...) { ... return true; ... }
-      - pattern-either:
-          - pattern-inside: |
-              function $FN(...) { ... }
-          - pattern-inside: |
-              async function $FN(...) { ... }
-          - pattern-inside: |
-              const $FN = (...) => { ... }
-          - pattern-inside: |
-              const $FN = async (...) => { ... }
-          - pattern-inside: |
-              $FN(...) { ... }
-      - metavariable-regex:
-          metavariable: $FN
-          regex: '(?i)(authoriz|authz|can[a-z0-9_]*access|^allow|permit|grant|hasaccess|isallowed|isauthorized|checkpolicy|enforce|guard|verifyaccess|ensureaccess|checkauth)'
-    paths:
-      exclude:
-        - "**/*.test.ts"
-        - "**/*.test.tsx"
-        - "**/*.test.mjs"
-        - "**/*.test.js"
-        - "**/*.spec.ts"
 
   # --------------------------------------------------------------------------
   # A07:2021 Identification & Authentication Failures / A05 Misconfiguration —
