@@ -1,10 +1,10 @@
 /**
- * The slice registry: the validated, in-repo catalogue of BF-01..BF-12.
+ * The slice registry: the validated, in-repo catalogue of BF-01..BF-13.
  *
  * The registry data is human-authored in `./tasks` (loop-harness-plan.md H1: no
  * prose auto-parsing of work boundaries). This module is the gatekeeper around it:
  * every entry is parsed with `sliceContractSchema`, ids must be unique and cover
- * exactly BF-01..BF-12, every `dependsOn` must resolve, and the dependency graph
+ * exactly BF-01..BF-13, every `dependsOn` must resolve, and the dependency graph
  * must be acyclic. `validateEntries` is the pure validator (testable with fixtures);
  * `validateRegistry` runs it over the real `./tasks`. Accessors throw only on a
  * malformed in-repo registry (programmer error).
@@ -15,7 +15,7 @@ import type { SliceContract } from "./slice-contract.js";
 import { sliceContractSchema } from "./slice-contract.js";
 import { tasks } from "./tasks.js";
 
-const EXPECTED_SLICE_COUNT = 12;
+const EXPECTED_SLICE_COUNT = 13;
 const SLICE_ID_PAD = 2;
 
 /** A single registry problem, tagged by `code` so callers branch on the code. */

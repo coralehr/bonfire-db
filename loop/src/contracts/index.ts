@@ -2,7 +2,7 @@
  * Public surface of the loop harness slice-contract system.
  *
  * The contracts module owns the typed unit of work the loop gates: the Zod slice
- * schema, the default-deny allowed-paths check, and the validated BF-01..BF-12
+ * schema, the default-deny allowed-paths check, and the validated BF-01..BF-13
  * registry. Re-exported here so consumers import from one entry point.
  */
 

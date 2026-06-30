@@ -1,5 +1,5 @@
-// The BF-01..BF-12 slice registry. Human-authored data (loop-harness-plan.md
-// H1: no prose auto-parsing). Drafted from docs/plans/mvp-demo-plan.md (v2),
+// The BF-01..BF-13 slice registry. Human-authored data (loop-harness-plan.md
+// H1: no prose auto-parsing). Drafted from docs/plans/mvp-demo-plan.md (v3),
 // reconciled to its canonical layout (packages/{core,sdk,mcp}, apps/{api,demo},
 // drizzle/, seed/) and reviewed against it. The secrets/real-data/gates/harness
 // floor is global (allowed-paths.ts GLOBAL_FORBIDDEN_PATHS); forbiddenPaths here
@@ -135,18 +135,20 @@ export const tasks: readonly SliceContract[] = [
   {
     id: "BF-03",
     title:
-      "Typed write primitive \u2192 lossless FHIR R4 / US Core 6.1.0 + loss-ledger + golden round-trip",
+      "Typed write primitive \u2192 lossless FHIR R4 / US Core 6.1.0 + loss-ledger + golden round-trip + terminology validate-on-write + stored Consent resource",
     profile: "fhir",
-    goal: "Build the typed write primitive that maps the ~8 scribe resources to FHIR R4 / US Core 6.1.0 and persists canonical FHIR plus its prior version and the replayable raw typed payload in ONE atomic transaction. Losslessness is gated by a loss-ledger and by golden round-trip fixtures validated against the official HL7 FHIR validator.",
+    goal: "Build the typed write primitive that maps the ~8 scribe resources to FHIR R4 / US Core 6.1.0 and persists canonical FHIR plus its prior version and the replayable raw typed payload in ONE atomic transaction. Losslessness is gated by a loss-ledger and by golden round-trip fixtures validated against the official HL7 FHIR validator. Coded fields are validated on write against a version-pinned, license-clean terminology pack (local SQL set-membership, no network), and the FHIR Consent resource is stored losslessly via the same canonical path (the directive-to-SQL enforcement compiler is deferred post-v0; storage is in scope now).",
     why: 'FHIR R4 is the source of truth and the typed primitive is the only write API; a lossy mapping silently corrupts the clinical record, and an unverified "FHIR-valid"/"conformant" claim is how conformance rots. Keeping the raw typed payload (write_inputs) lets FHIR be re-derived when the mapping improves, and the loss-ledger + HL7-validated golden round-trips make losslessness and conformance machine-proven rather than asserted.',
     dependsOn: ["BF-01", "BF-02"],
     allowedPaths: [
       "packages/core/src/write/**",
       "packages/core/src/fhir/**",
+      "packages/core/src/terminology/**",
       "packages/core/src/index.ts",
       "packages/core/src/**/*.test.ts",
       "packages/core/package.json",
       "fixtures/golden/**",
+      "fixtures/terminology/**",
       "scripts/fhir/**",
       "package.json",
       "docs/adr/**",
@@ -162,6 +164,8 @@ export const tasks: readonly SliceContract[] = [
       "Every golden FHIR fixture passes the official HL7 FHIR validator against FHIR R4 + US Core 6.1.0 with zero errors; the validate step exits non-zero on any validator error so 'FHIR-valid' is never assumed without the validator, and the validator output is captured as evidence.",
       "docs/loss-ledger.md exists and is empty unless a field is intentionally dropped; each entry references an ADR under docs/adr/ recording explicit human sign-off (a field may be dropped ONLY via ADR + sign-off).",
       "write_inputs replay: re-deriving FHIR from a stored write_inputs row reproduces the canonical FHIR persisted at write time (the mapping is deterministic and replayable).",
+      "Terminology validate-on-write: coded fields are checked by pure local SQL set-membership against a version-pinned terminology pack (its version is recorded on the result); only `required`-strength bindings on small enumerated value sets REJECT the write (fail-closed), while extensible/preferred bindings and large intensional sets record an audited data-quality WARNING rather than blocking. Only redistributable vocabularies are bundled (ICD-10-CM, RxNorm core, LOINC with the Regenstrief NOTICE); NO SNOMED concept content is shipped (SNOMED is validated for SCTID/URI format only). The validator is an interface (BundledPackValidator default + a RemoteTxValidator seam, I/O byte-compatible with `$validate-code`) so a real terminology server can be swapped in with no schema change. validate-on-write never makes a blocking network call.",
+      "The FHIR Consent resource is accepted by the typed write path and stored losslessly in fhir_resources (canonical JSONB) like any other resource (round-trip + RLS-scoped); query-time directive enforcement is explicitly out of scope here (deferred to a post-v0 consent compiler).",
       "All data used by code, tests, and fixtures is synthetic only; the repo gate (tsc/eslint/knip/jscpd/dependency-cruiser/semgrep/synthetic-only/allowed-paths) passes green."
     ],
     verify: [
@@ -177,7 +181,9 @@ export const tasks: readonly SliceContract[] = [
       "eval/loss-ledger-enforced: a mapping change that drops or transforms a field WITHOUT an ADR-backed loss-ledger entry fails the gate (lossy-passing-as-lossless regression).",
       "eval/hl7-validator-required: a golden fixture mutated to violate FHIR R4 / US Core 6.1.0 is REJECTED by the HL7 validator step with a non-zero exit (fake-conformance regression \u2014 no 'valid' without the validator).",
       "eval/write-atomicity: a forced mid-transaction failure leaves zero rows in fhir_resources, history, and write_inputs (no partial or dual write).",
-      "eval/write-inputs-replay: re-deriving FHIR from a stored write_inputs row reproduces the canonical FHIR persisted at write time."
+      "eval/write-inputs-replay: re-deriving FHIR from a stored write_inputs row reproduces the canonical FHIR persisted at write time.",
+      "eval/terminology-required-binding-rejects: a write with an invalid code on a required-strength enumerated binding is REJECTED (fail-closed) while an extensible-binding miss is accepted with an audited warning; the result records the terminology pack version, and validation issues zero network calls (a planted SNOMED concept-membership check, which we do not ship, is NOT used to block).",
+      "eval/consent-stored-lossless: a synthetic FHIR Consent resource round-trips losslessly through the write path and is RLS-scoped to its practice_id (no directive enforcement asserted here)."
     ],
     dangerChecks: ["lossy-fhir", "fake-conformance", "cross-tenant-leak"],
     caps: {
@@ -244,15 +250,16 @@ export const tasks: readonly SliceContract[] = [
   {
     id: "BF-05",
     title:
-      "ABAC policy receipt on every read (scope-before-retrieve, default-deny) + hash-chained append-only tamper-evident audit with tamper detection",
+      "ABAC policy receipt on every read (scope-before-retrieve, default-deny, purpose-of-use) + hash-chained append-only tamper-evident audit with tamper detection",
     profile: "security",
-    goal: "Build the read-path security primitives: an ABAC policy decision that is default-deny and emits a structured policy receipt on every allow AND deny, computed from request scope BEFORE any target row is retrieved; plus an append-only, hash-chained (prev_hash + row_hash) tamper-evident audit log with a verification routine that detects any mutation, reordering, insertion, or deletion and exposes each row_hash for downstream citation linkage.",
+    goal: "Build the read-path security primitives: an ABAC policy decision that is default-deny and emits a structured policy receipt on every allow AND deny, computed from request scope BEFORE any target row is retrieved, with purpose-of-use (TREAT / HPAYMT / HOPERAT / HRESCH / ETREAT) as a typed, required input bound onto both the decision and the receipt; plus an append-only, hash-chained (prev_hash + row_hash) tamper-evident audit log with a verification routine that detects any mutation, reordering, insertion, or deletion and exposes each row_hash for downstream citation linkage. The decision is a pure typed default-deny function (Cedar/OPA semantics — default-deny, forbid-wins, no rule ordering — without adopting an external runtime PDP in v0).",
     why: "Retrofitting authorization and audit is how PHI leaks and how tampering goes unnoticed. Scope-before-retrieve plus default-deny prevents the scope-after-retrieve leak class, and a verifiable prev_hash/row_hash chain makes the audit trail trustworthy enough to anchor CCP span citations and satisfy HIPAA 45 CFR 164.312 audit-controls and integrity. These are primitives consumed by cited search (BF-06), CCP (BF-07), and governance (BF-09), so they must be correct and fail-closed from row zero.",
     dependsOn: ["BF-01", "BF-02"],
     allowedPaths: ["packages/core/**", "drizzle/**", "docker-compose.yml"],
     forbiddenPaths: ["sgrule-tests/**", "docs/loop/**", "packages/fhir/**"],
     acceptance: [
-      "The ABAC decision function returns a structured policy receipt for BOTH allow and deny outcomes; the receipt is a typed object containing at least: decision ('allow' | 'deny'), actor/subject id, resource type, practice_id, matched rule id (or null), human-readable reason, and an ISO-8601 timestamp.",
+      "The ABAC decision function returns a structured policy receipt for BOTH allow and deny outcomes; the receipt is a typed object containing at least: decision ('allow' | 'deny'), actor/subject id, resource type, practice_id, a required `purposeOfUse` enum (TREAT | HPAYMT | HOPERAT | HRESCH | ETREAT), matched rule id (or null), human-readable reason, and an ISO-8601 timestamp.",
+      "Purpose-of-use is a required, typed input to the decision (Zod enum at the boundary): a missing, empty, or unrecognized purpose-of-use resolves to DENY with a receipt (never defaulted to an allow-implying purpose); the purposeOfUse value used in the decision is the value recorded on the receipt and the audit row (no divergence). ETREAT (emergency/break-glass elevation) is NOT grantable in v0 — a request asserting ETREAT is default-denied (the break-glass elevation flow is deferred post-v0).",
       "DEFAULT-DENY is enforced: any request with no matching allow rule, a missing/invalid/unparseable policy input, or an evaluation error resolves to 'deny' with a receipt; a negative test asserts an unrecognized actor and an empty/garbage scope each yield deny (never throw-to-allow, never undefined-as-allow).",
       "Scope-before-retrieve: the decision is computed solely from request scope (actor + practice_id + resource type/filters) and never loads the target rows; a test proves the deny path issues zero data queries against fhir_resources/projection tables (e.g. via a query spy or by the function signature accepting scope, not rows).",
       "Audit table is append-only at the DB layer: a trigger/rule or revoked UPDATE/DELETE privilege rejects both UPDATE and DELETE; an integration test asserts that an UPDATE and a DELETE against the audit table both fail with a database error.",
@@ -273,6 +280,7 @@ export const tasks: readonly SliceContract[] = [
     ],
     evals: [
       "abac-default-deny: unknown actor, empty scope, and forced evaluation error each resolve to deny WITH a structured receipt (fail-closed, never throw-to-allow)",
+      "abac-purpose-of-use-required: a missing/empty/unrecognized purpose-of-use denies with a receipt; the purposeOfUse used in the decision equals the value on the receipt and audit row; an ETREAT request is default-denied in v0 (break-glass deferred)",
       "abac-scope-before-retrieve: the deny decision performs zero reads of target rows (decision computed from scope only, verified by query spy)",
       "audit-append-only: UPDATE and DELETE against the audit table are both rejected at the DB layer",
       "audit-hash-chain-verify: a clean chain verifies OK and row N+1.prev_hash == row N.row_hash with deterministic SHA-256 row_hash",
@@ -291,11 +299,12 @@ export const tasks: readonly SliceContract[] = [
   },
   {
     id: "BF-06",
-    title: "Cited search (tsvector) with scope-before-retrieve and policy/audit-stamped results",
+    title:
+      "Cited search (hybrid BM25 + pgvector, RRF-fused; pluggable reranker OFF by default) with scope-before-retrieve and policy/audit-stamped results",
     profile: "retrieval",
-    goal: "Add lexical tsvector cited search over the typed vd_* projections that applies the ABAC + practice_id scope filter inside the retrieval query (scope-before-retrieve, default-deny), returning results where every hit carries a citation and freshness and the response carries excludedByPolicy, a structured policyReceipt, and an auditEventId.",
-    why: "Cited search is the deterministic sub-5-minute wow and the safe read surface the agent depends on. Pushing the scope/RLS filter into the retrieval query (never as a post-fetch app filter) and stamping every read with a policy receipt + audit id is what prevents cross-tenant and scope-after-retrieve leaks and makes every returned result attributable and auditable.",
-    dependsOn: ["BF-04", "BF-05"],
+    goal: "Add HYBRID cited search over the typed vd_* projections — a BM25 lexical arm and a pgvector (HNSW) semantic arm fused with Reciprocal Rank Fusion in SQL — that applies the ABAC + practice_id scope filter inside the retrieval query (scope-before-retrieve, default-deny), returning results where every hit carries a citation and freshness and the response carries excludedByPolicy, a structured policyReceipt, and an auditEventId. A cross-encoder reranker is a pluggable stage that is OFF by default; in the default config no embedding/rerank call leaves the tenant boundary (self-hosted open-weight models only — synthetic-only in dev).",
+    why: "Cited search is the deterministic sub-5-minute wow and the safe read surface the agent depends on. Clinical retrieval needs BOTH modes by construction (exact codes/MRNs need lexical; paraphrased findings need vector), and adding the vector arm later is a migration, not a flag — so hybrid ships in v0. Pushing the scope/RLS filter into the retrieval query (never as a post-fetch app filter) and stamping every read with a policy receipt + audit id is what prevents cross-tenant and scope-after-retrieve leaks; keeping embeddings/rerank inside the boundary (no external PHI egress) is the security floor.",
+    dependsOn: ["BF-04", "BF-05", "BF-13"],
     allowedPaths: [
       "packages/core/src/search/**",
       "packages/core/src/index.ts",
@@ -314,13 +323,15 @@ export const tasks: readonly SliceContract[] = [
       "loop/gates/**"
     ],
     acceptance: [
-      "A `searchClinical` lexical (tsvector) read primitive is exported from `packages/core` with an explicit return type `Promise<Result<SearchResponse, BonfireError>>`; no `any`, no `as` casts, no `@ts-ignore`/eslint-disable; input and output are parsed by Zod 4 schemas at the boundary.",
+      "A `searchClinical` HYBRID read primitive is exported from `packages/core` with an explicit return type `Promise<Result<SearchResponse, BonfireError>>`; no `any`, no `as` casts, no `@ts-ignore`/eslint-disable; input and output are parsed by Zod 4 schemas at the boundary.",
+      "Hybrid retrieval fuses a BM25 lexical arm and a pgvector HNSW semantic arm via Reciprocal Rank Fusion (RRF) computed in SQL; a test asserts a query matching only an exact code/token (lexical-strong) and a query matching only paraphrased text (vector-strong) each surface the expected resource, proving both arms contribute. `pgvector >= 0.8.2` is required and iterative index scans are enabled so the RLS/scope filter over HNSW does not silently lose recall for sparse tenants.",
+      "The cross-encoder reranker is a pluggable stage that is OFF by default; with it disabled the search returns the RRF-fused ranking, and a test asserts the default config performs zero reranking. In the default configuration NO embedding or rerank call goes to an external/off-box API (self-hosted open-weight models only); a test/config-assertion proves the default path makes no external model call (no PHI egress).",
       "Each row in `SearchResponse.results` carries a `citation` (resourceId + JSONB path + audit `row_hash`) and a `freshness` timestamp (projection as-of), and the top-level response carries `excludedByPolicy` (resource ids/types withheld by the scope filter, with count), a structured `policyReceipt` (allow/deny + reason code), and an `auditEventId`.",
       "Scope-before-retrieve is enforced: the ABAC scope predicate and `practice_id` filter are pushed into the SQL retrieval query (WHERE/CTE), provable from the captured query plan (EXPLAIN) \u2014 rows are never fetched then filtered in application code.",
       "Default-deny: when the ABAC decision for a candidate is anything other than an explicit allow (including ambiguity or a policy-evaluation error), the candidate is excluded into `excludedByPolicy` and never appears in `results`; a test injecting a policy error asserts the row is denied, not returned.",
       "Cross-tenant isolation: with the identical search term seeded under two distinct `practice_id`s and RLS active, a search executed as practice A returns zero rows authored under practice B (negative test passes).",
       "Every search \u2014 including a zero-result search \u2014 writes exactly one append-only hash-chained AuditEvent and returns its id as `auditEventId`; no `searchClinical` code path returns results without first writing the audit event.",
-      "A migration adds a GIN tsvector index over the searched typed-projection columns and the search uses it; EXPLAIN shows the GIN index in use and no sequential scan over the `fhir_resources` JSONB.",
+      "Migrations add a GIN/BM25 lexical index AND a pgvector HNSW index over the searched typed-projection columns and the search uses them; EXPLAIN shows the lexical index and the HNSW index in use and no sequential scan over the `fhir_resources` JSONB. The embedding provider is pluggable and the model id + dimension are stored alongside each vector (re-embed migration safety).",
       "A deterministic golden synthetic-query fixture produces stable, ordered results; a snapshot test pins the `citation`, `freshness`, `excludedByPolicy`, and `policyReceipt` shape."
     ],
     verify: [
@@ -336,7 +347,8 @@ export const tasks: readonly SliceContract[] = [
       "BF-06-eval-default-deny: a candidate whose policy decision is non-allow/ambiguous/erroring is placed in excludedByPolicy and never in results; a fail-open change (returning on error) fails the eval.",
       "BF-06-eval-audit-on-read: every search (including zero-result) writes exactly one append-only hash-chained AuditEvent and returns auditEventId; a path that returns results with no audit write fails the eval.",
       "BF-06-eval-citation-freshness: each result carries a valid citation (resourceId + JSONB path + audit row_hash) and freshness; a result missing the citation or audit hash fails the eval.",
-      "BF-06-eval-tsvector-index-used: EXPLAIN confirms the GIN tsvector index is used with no sequential scan over fhir_resources JSONB (architecture/perf regression guard)."
+      "BF-06-eval-hybrid-index-used: EXPLAIN confirms both the lexical (GIN/BM25) index and the pgvector HNSW index are used with no sequential scan over fhir_resources JSONB, and RRF fusion is applied (architecture/perf regression guard).",
+      "BF-06-eval-no-phi-egress: in the default config, search performs zero external embedding/rerank API calls and the reranker stage is off; flipping a model provider to an off-box endpoint in the default path fails the eval (PHI-egress guard)."
     ],
     dangerChecks: ["scope-after-retrieve", "cross-tenant-leak", "fail-open-authz", "audit-bypass"],
     caps: {
@@ -595,10 +607,10 @@ export const tasks: readonly SliceContract[] = [
   {
     id: "BF-11",
     title:
-      "BTAB benchmark: 3 arms, named tokenizer, accuracy-per-1K-tokens, SHA-256 pre-registered splits, publish RESULTS.md",
+      "BTAB benchmark: Synthea-primary, 3 arms, deterministic server-state grading + security axis, accuracy×cost Pareto (accuracy-per-1K secondary), SHA-256 pre-registered splits, publish RESULTS.md",
     profile: "benchmark",
-    goal: "Build BTAB, the open benchmark that proves the thesis: run a fixed golden-query suite over three context arms (raw FHIR, compact JSON, Bonfire CCP) using a named per-model tokenizer, compute median tokens/query, task accuracy, citation precision/recall, and the primary metric accuracy-per-1K-tokens, then publish a reproducible RESULTS.md over SHA-256 pre-registered, synthetic-only held-out splits.",
-    why: 'BTAB is the project\'s marketing artifact and the moat is honesty: a reproducible, contamination-free, named-tokenizer benchmark is the only credible proof that "the agent never reads raw FHIR" is simultaneously cheaper and more accurate. A fabricated, rounded-up, or non-reproducible number (or one run on a contaminated split) destroys the trust the entire open-source positioning depends on.',
+    goal: "Build BTAB, the open benchmark that proves the thesis. PRIMARY data is a version-pinned, redistributable Synthea cohort (Apache-2.0) committed to the repo so the whole benchmark is one-command reproducible and synthetic-only. Run a fixed golden-query suite over three context arms (raw FHIR, compact JSON, Bonfire CCP) using a named per-model tokenizer. GRADING is deterministic server-state assertion (Bonfire IS the DB): READ tasks use executable FHIRPath/SQL reference answers with normalized exact-match — not an LLM judge as scorer of record. Report median tokens/query, task accuracy, citation precision/recall, and a security/governance axis as an accuracy×cost Pareto; accuracy-per-1K-tokens is a SECONDARY efficiency figure, never the ranking key. Publish a reproducible RESULTS.md over SHA-256 pre-registered splits, run >=3x at temp 0 with mean+/-variance.",
+    why: 'BTAB is the project\'s marketing artifact and the moat is honesty: a reproducible, contamination-free benchmark is the only credible proof of the thesis. MIMIC-IV is a trap (its DUA forbids redistribution and closed-LLM-API use and breaks synthetic-only) so it can never be the turnkey headline; Synthea is the redistributable primary, with an optional MIMIC/FHIR-AgentBench secondary line for credentialed users only. Deterministic server-state grading (not an LLM judge) and reporting cheaper-as-measured rather than asserting "more accurate" are what make the number trustworthy; a fabricated, rounded-up, LLM-judge-scored, or non-reproducible number destroys the trust the entire open-source positioning depends on.',
     dependsOn: ["BF-02", "BF-05", "BF-06", "BF-07"],
     allowedPaths: [
       "apps/benchmark/**",
@@ -610,8 +622,11 @@ export const tasks: readonly SliceContract[] = [
     acceptance: [
       "Exactly three named, selectable context arms are implemented \u2014 (a) raw FHIR (full canonical record), (b) compact JSON (non-cited compact serialization), (c) Bonfire CCP (span-cited projection) \u2014 and a unit test asserts each arm produces serialized context for every fixture query in the golden suite.",
       "A named tokenizer is declared and version-pinned per model; the runner refuses to emit token metrics when the tokenizer is unnamed/unpinned (default-deny), and token counts are computed via that named tokenizer (not a char/word heuristic). RESULTS.md records the tokenizer name + version.",
-      "All five metrics are computed and reported per arm: median tokens/query, task accuracy on the fixed golden-query suite, citation precision and citation recall (CCP arm), and the PRIMARY metric accuracy-per-1K-tokens; each metric function has a unit test on known inputs with expected outputs.",
-      "A fixed, versioned golden-query suite is committed under apps/benchmark/ with count > 0, where every query carries an expected answer and expected gold citation spans (resource id + JSONB path).",
+      "The PRIMARY benchmark corpus is a version-pinned, redistributable Synthea cohort (Apache-2.0; e.g. `bonfire-bench-v0`) committed under apps/benchmark/ with its Synthea version + seed recorded, loaded into Bonfire; RESULTS.md states the synthetic-data realism ceiling explicitly. Any MIMIC/FHIR-AgentBench comparison is an OPTIONAL secondary line gated behind credentialed access, never the redistributable headline.",
+      "Grading is DETERMINISTIC server-state assertion, not an LLM judge as scorer of record: READ tasks compare the agent answer to an executable FHIRPath/SQL reference over the pinned cohort with normalized exact-match, and WRITE tasks assert the resulting FHIR/DB state + audit delta. An LLM judge may be used ONLY for irreducible free-text and, when used, is gated (report Cohen's kappa vs human, AB/BA position-bias < 0.10, a cross-family judge, >=500 hand-validated samples, false-negative skew) — a config that scores the headline via an LLM judge fails the gate.",
+      "Metrics are computed and reported per arm: median tokens/query, task accuracy on the fixed golden-query suite, and citation precision/recall (CCP arm), reported as an accuracy×cost Pareto; accuracy-per-1K-tokens is reported as a SECONDARY efficiency figure and is NEVER used as the ranking key. Each run is executed >=3x at temperature 0 and RESULTS.md reports mean +/- variance. Each metric function has a unit test on known inputs with expected outputs.",
+      "A security/governance axis is a first-class scored output: adversarial tasks where the correct outcome is a block/refusal (cross-tenant access attempt, ABAC-denied write, an agent attempting to commit) are scored, and RESULTS.md reports a safe-refusal rate and a cross-tenant-leak rate that MUST be 0 (a nonzero cross-tenant-leak rate fails the benchmark).",
+      "A fixed, versioned golden-query suite is committed under apps/benchmark/ with count > 0, where every query carries an executable reference answer and expected gold citation spans (resource id + JSONB path).",
       "Held-out splits are SHA-256 pre-registered: a committed split manifest records each split's sha256; the runner verifies the live corpus split hash against the manifest before running and exits non-zero on any mismatch (no train/test contamination; default-deny).",
       "The token-delta metric runs fully OFFLINE with ZERO API keys via a documented command, is deterministic, and two consecutive runs over the same corpus+splits+tokenizer produce byte-identical token metrics.",
       "The benchmark corpus and RESULTS.md are SYNTHETIC-ONLY: the semantic synthetic-only scanner passes over apps/benchmark/** and RESULTS.md with zero real-PHI signals.",
@@ -636,9 +651,12 @@ export const tasks: readonly SliceContract[] = [
       "btab-no-overclaim: the reduction/accuracy/accuracy-per-1K figures written to RESULTS.md equal the values recomputed from the raw run records; a fabricated or rounded-up number fails the eval",
       "btab-results-traceable: RESULTS.md embeds the corpus SHA + split SHAs + tokenizer id, and the eval re-derives the headline metric from exactly those inputs",
       "btab-synthetic-only: the semantic synthetic-only scanner over the benchmark corpus + RESULTS.md returns zero real-PHI signals",
-      "btab-three-arms: each of the raw-FHIR, compact-JSON, and CCP arms produces context and an answer for every golden query, and the CCP arm additionally emits citations scored for precision/recall"
+      "btab-three-arms: each of the raw-FHIR, compact-JSON, and CCP arms produces context and an answer for every golden query, and the CCP arm additionally emits citations scored for precision/recall",
+      "btab-deterministic-grading: READ task scores are computed by executable FHIRPath/SQL reference answers (normalized exact-match), not an LLM judge; rewiring the headline score to an LLM judge fails the eval (the judge is allowed only for free-text under the kappa/position-bias gate)",
+      "btab-security-axis: adversarial cross-tenant/ABAC-deny/agent-commit tasks are scored and RESULTS.md reports cross-tenant-leak rate = 0; a single leaked cross-tenant row fails the benchmark (security axis is first-class, not optional)",
+      "btab-synthea-redistributable: the primary corpus is the committed version-pinned Synthea cohort and the benchmark runs end-to-end with zero credentialed/PHI data; making the headline depend on MIMIC/PhysioNet credentials fails the eval"
     ],
-    dangerChecks: ["fake-conformance"],
+    dangerChecks: ["fake-conformance", "cross-tenant-leak"],
     caps: {
       maxAttempts: 3,
       maxTurns: 80,
@@ -744,6 +762,67 @@ export const tasks: readonly SliceContract[] = [
       maxBudgetUSD: 15
     },
     requiredAgents: ["planner", "maker", "verifier", "security-auditor"],
+    greptileRequired: true
+  },
+  {
+    id: "BF-13",
+    title:
+      "BYO-auth verifier: external OIDC/JWT verification -> (iss,sub) membership mapping -> RLS tenant/role context (one IdP adapter; SMART vocabulary, server deferred)",
+    profile: "security",
+    goal: "Build the thin, IdP-agnostic identity boundary that connects external authentication to fail-closed RLS. A `verifyToken` function (jose: cached kid-aware JWKS with key rotation, a positive `alg` allow-list, asserted iss + aud + exp) returns a typed Result that fails closed; verified claims are mapped via a server-side `(iss, sub) -> membership` table to the practice_id + role used by BF-01's RLS GUC, set transaction-locally. One configurable OIDC adapter ships in v0; the SMART claim vocabulary (fhirUser, patient/clinician compartment) is adopted now so SMART is a later additive adapter, but the SMART authorization server is deferred.",
+    why: "RLS is only as trustworthy as the code path that sets the tenant context, so the verified-identity -> practice_id bridge is the single load-bearing line that makes fail-closed multi-tenancy real for an agent-native backend. The dangerous failure modes are concrete and from-row-zero: algorithm-confusion / `alg:none`, missing iss/aud, trusting client-supplied tenant/role, and pooled-connection context bleed (the CoralEHR 2026-06-17 cross-tenant class). Consuming verified identity (not being a SMART OAuth server) is the right, bounded v0 surface.",
+    dependsOn: ["BF-01"],
+    allowedPaths: [
+      "packages/core/src/auth/**",
+      "packages/core/src/index.ts",
+      "packages/core/src/**/*.test.ts",
+      "apps/api/src/auth/**",
+      "apps/api/src/middleware/**",
+      "apps/api/test/**",
+      "drizzle/**",
+      "docs/adr/**",
+      "package.json"
+    ],
+    forbiddenPaths: [
+      "packages/sdk/**",
+      "packages/mcp/**",
+      "packages/core/src/fhir/**",
+      "packages/core/src/write/**"
+    ],
+    acceptance: [
+      "`verifyToken` is exported with an explicit return type `Promise<Result<VerifiedIdentity, BonfireError>>`; it verifies the signature against a cached, kid-aware JWKS fetched from the configured IdP (supporting key rotation), enforces a positive `alg` allow-list (e.g. RS256/ES256/EdDSA), and asserts `iss`, `aud`, and `exp`. No `any`/`as`/`@ts-ignore`/eslint-disable; input/output parsed by Zod 4 at the boundary.",
+      "Algorithm-confusion and `alg:none` are rejected: a token with `alg:none`, or an RS256-issued token re-signed as HS256 with the public key, fails verification (returns a typed error, fails closed) -- the `alg` is taken from the configured allow-list, never trusted from the token header.",
+      "Missing/invalid `iss` or `aud`, an expired token, an unknown kid, or any verification error returns a Result error and sets NO tenant context, so BF-01's default-deny RLS returns zero rows (verification failure fails closed, never throws across the boundary).",
+      "Claims are NOT trusted for authorization scope: practice_id and role are resolved by a server-side `(iss, sub) -> membership` lookup (a tenant-scoped table), never read from a token claim or any request body/header; a token whose `sub` has no membership row is denied (no tenant context set).",
+      "The resolved practice_id/role is applied to RLS context ONLY via the transaction-local pooling-safe pattern (`set_config('app.current_practice_id', $1, true)` inside the per-request transaction), reusing BF-01's `db.withTenant()` wrapper; bare/session `SET` for `app.*` is absent (an ast-grep/semgrep rule bans it) and practice_id never originates from request input (a rule bans `practice_id` from request body/header).",
+      "Pooled-connection no-bleed: an integration test runs request B (practice B identity) on the physical pooled connection just used by request A (practice A) and asserts B sees only practice B context and a fresh connection with no verified identity yields zero rows (transaction-local context never leaks across checkouts).",
+      "BYO-IdP by config: the verifier accepts any OIDC issuer via configuration (issuer URL + JWKS URL + audience + claim-name map); exactly one adapter is wired in v0 and no auth vendor SDK is bundled. The identity claim is named per the SMART vocabulary (`fhirUser`) and roles model patient-vs-clinician compartments, but no SMART authorization-server endpoints (authorize/token/.well-known/smart-configuration) are implemented (explicitly deferred).",
+      "Every authentication decision (success and failure) emits exactly one append-only hash-chained audit entry (BF-05 audit API) carrying the actor identity (iss,sub), the resolved practice_id (or none), and the decision; a denied verification still writes an audit row.",
+      "`bun run gate` passes (strict typecheck/no-any, eslint with no escape hatches, dependency-cruiser boundaries, semgrep, secret scan, synthetic-only, allowed-paths); all tokens/keys used in tests are synthetic, generated in-test, and no real secret is committed."
+    ],
+    verify: [
+      "docker compose up -d",
+      "bun install --frozen-lockfile",
+      "bun run db:migrate",
+      "bun test packages/core",
+      "bun test apps/api",
+      "bun run gate"
+    ],
+    evals: [
+      "bf-13-alg-confusion-rejected: `alg:none` and an RS256->HS256 re-sign are both rejected (the alg comes from the allow-list, not the token header) -- fail-open-authz guard.",
+      "bf-13-iss-aud-exp-enforced: a token with a wrong/absent iss or aud, or an expired exp, is rejected and sets no tenant context.",
+      "bf-13-claims-not-trusted: a verified token whose claims assert a different practice_id/role than its `(iss,sub)` membership row is scoped by the MEMBERSHIP row, not the claim; a sub with no membership is denied (privilege-escalation guard).",
+      "bf-13-verify-fail-closed: any verification error sets no GUC and BF-01 default-deny returns zero rows (never throw-to-allow).",
+      "bf-13-pool-no-bleed: request B on request A's pooled connection sees only B's context; a fresh connection with no identity returns zero rows (cross-tenant-leak / pooler-bleed guard).",
+      "bf-13-auth-decision-audited: each success and failure writes exactly one hash-chained audit row carrying (iss,sub), resolved practice_id, and decision."
+    ],
+    dangerChecks: ["fail-open-authz", "cross-tenant-leak", "audit-bypass"],
+    caps: {
+      maxAttempts: 3,
+      maxTurns: 70,
+      maxBudgetUSD: 11
+    },
+    requiredAgents: ["maker", "verifier", "security-auditor"],
     greptileRequired: true
   }
 ];

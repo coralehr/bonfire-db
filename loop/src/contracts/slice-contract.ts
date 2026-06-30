@@ -1,7 +1,7 @@
 /**
  * The slice contract: the typed, Zod-validated unit of work the loop gates.
  *
- * Each Bonfire product slice (BF-01..BF-12, mvp-demo-plan.md) is described by one
+ * Each Bonfire product slice (BF-01..BF-13, mvp-demo-plan.md) is described by one
  * contract. The schema is the boundary: every field is parsed, not trusted, so a
  * malformed registry entry can never reach the gate pipeline. Shape source of
  * truth: loop-harness-plan.md section 3.3.
@@ -49,7 +49,7 @@ export type DangerCheck = z.infer<typeof dangerCheckSchema>;
 export const requiredAgentSchema = z.enum(["planner", "maker", "verifier", "security-auditor"]);
 export type RequiredAgent = z.infer<typeof requiredAgentSchema>;
 
-/** Slice id pattern: `BF-` followed by exactly two digits (BF-01 .. BF-12). */
+/** Slice id pattern: `BF-` followed by exactly two digits (BF-01 .. BF-13). */
 export const SLICE_ID_PATTERN = /^BF-\d{2}$/;
 
 const sliceIdSchema = z.string().regex(SLICE_ID_PATTERN, "must match /^BF-\\d{2}$/");
