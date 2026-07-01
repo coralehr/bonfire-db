@@ -25,6 +25,8 @@ export const tasks: readonly SliceContract[] = [
       ".env.example",
       "docs/adr/**",
       "package.json",
+      // Dependency additions must record their lockfile change (lockfile gate).
+      "bun.lock",
       "turbo.json",
       "tsconfig.json"
     ],
