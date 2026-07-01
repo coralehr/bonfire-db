@@ -16,6 +16,7 @@
       "!drizzle/**",
       "!bun.lock",
       "!.claude/agents/**",
+      "!.claude/settings.local.json",
       "!.codex/agents/**"
     ]
   },

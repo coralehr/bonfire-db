@@ -14,4 +14,7 @@ export function loopManifest(version: string): LoopManifest {
 }
 
 export * from "./agents/index.js";
+export * from "./cli/index.js";
 export * from "./contracts/index.js";
+export * from "./gates/index.js";
+export * from "./worktree/index.js";

@@ -18,7 +18,8 @@
     "format": "biome check --write .",
     "test": "turbo run test",
     "gate": "turbo run gate",
-    "gen:agents": "bun run loop/src/agents/write.ts"
+    "gen:agents": "bun run loop/src/agents/write.ts",
+    "loop": "bun run loop/src/cli/bin.ts"
   },
   "devDependencies": {
     "@ast-grep/cli": "^0.44.0",
