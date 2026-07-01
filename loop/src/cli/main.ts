@@ -7,6 +7,8 @@
  * silent zero.
  */
 import { runGateCommand } from "./commands/gate.js";
+import { runRatchetCommand } from "./commands/ratchet.js";
+import { runStateCommand } from "./commands/state.js";
 import { runWorktreeCommand } from "./commands/worktree.js";
 import { ExitCode } from "./exit-codes.js";
 import type { CliIO } from "./io.js";
@@ -24,22 +26,35 @@ usage:
   loop worktree list [--json]
   loop worktree remove <path> [--json]
       per-agent worktree isolation under .worktrees/.
+  loop ratchet [--write] [--json]
+      enforce the memory closure invariant: the bug-patterns KB must parse,
+      every guarded entry's guard must exist and be proven, and RATCHET.md
+      must match the KB. --write regenerates docs/loop/RATCHET.md.
+  loop state list [--json]
+  loop state set <slice> <inbox|active|done|failed> [--note <text>] [--actor <name>]
+      read/append the slice STATE ledger (loop/memory/state.jsonl).
 
 global:
   --help, -h     show this help
   --version, -v  print the version
 `;
 
+type CommandHandler = (io: CliIO, args: readonly string[]) => number;
+
+const COMMANDS: Readonly<Record<string, CommandHandler>> = {
+  gate: runGateCommand,
+  worktree: runWorktreeCommand,
+  ratchet: runRatchetCommand,
+  state: runStateCommand
+};
+
+const HELP_FLAGS = new Set(["help", "--help", "-h"]);
+
 export function main(argv: readonly string[], io: CliIO): number {
   try {
     const [subcommand, ...rest] = argv;
 
-    if (
-      subcommand === undefined ||
-      subcommand === "help" ||
-      subcommand === "--help" ||
-      subcommand === "-h"
-    ) {
+    if (subcommand === undefined || HELP_FLAGS.has(subcommand)) {
       io.stdout(HELP);
       return ExitCode.OK;
     }
@@ -48,15 +63,12 @@ export function main(argv: readonly string[], io: CliIO): number {
       return ExitCode.OK;
     }
 
-    switch (subcommand) {
-      case "gate":
-        return runGateCommand(io, rest);
-      case "worktree":
-        return runWorktreeCommand(io, rest);
-      default:
-        io.stderr(`loop: unknown command '${subcommand}'\n\n${HELP}`);
-        return ExitCode.USAGE;
+    const handler = COMMANDS[subcommand];
+    if (handler === undefined) {
+      io.stderr(`loop: unknown command '${subcommand}'\n\n${HELP}`);
+      return ExitCode.USAGE;
     }
+    return handler(io, rest);
   } catch (error) {
     io.stderr(`loop: internal error — ${error instanceof Error ? error.message : String(error)}\n`);
     return ExitCode.INTERNAL;

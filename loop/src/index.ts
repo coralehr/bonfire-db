@@ -17,4 +17,6 @@ export * from "./agents/index.js";
 export * from "./cli/index.js";
 export * from "./contracts/index.js";
 export * from "./gates/index.js";
+export * from "./memory/index.js";
+export * from "./verify/index.js";
 export * from "./worktree/index.js";

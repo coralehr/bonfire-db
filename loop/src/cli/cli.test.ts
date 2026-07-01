@@ -53,6 +53,17 @@ describe("main — dispatch + exit-code contract", () => {
     const { io } = fakeIO();
     expect(main(["worktree", "--nope"], io)).toBe(ExitCode.USAGE);
   });
+
+  test("a bad ratchet flag is a usage error (exit 2)", () => {
+    const { io } = fakeIO();
+    expect(main(["ratchet", "--nope"], io)).toBe(ExitCode.USAGE);
+  });
+
+  test("state without an action is a usage error (exit 2)", () => {
+    const { io } = fakeIO();
+    expect(main(["state"], io)).toBe(ExitCode.USAGE);
+    expect(main(["state", "set", "BF-01"], io)).toBe(ExitCode.USAGE);
+  });
 });
 
 const FAIL: GateResult = {
