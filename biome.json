@@ -14,7 +14,9 @@
       "!**/coverage",
       "!**/*.gen.ts",
       "!drizzle/**",
-      "!bun.lock"
+      "!bun.lock",
+      "!.claude/agents/**",
+      "!.codex/agents/**"
     ]
   },
   "formatter": {

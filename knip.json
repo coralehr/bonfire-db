@@ -2,37 +2,12 @@
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "ignore": ["**/*.d.ts"],
   "ignoreBinaries": ["bun", "docker"],
-  "ignoreDependencies": ["@types/bun", "@types/react", "@types/react-dom"],
   "ignoreUnresolved": ["^bun:"],
+  "ignoreDependencies": ["@ast-grep/cli", "jscpd"],
   "workspaces": {
-    ".": {
-      "entry": [
-        "scripts/loop/*.mjs",
-        "scripts/seed/*.ts",
-        "scripts/smoke/*.ts",
-        "drizzle/schema.ts"
-      ],
-      "project": ["scripts/**/*.{ts,mjs}", "seed/**/*.ts", "drizzle/**/*.ts"]
-    },
-    "packages/core": {
-      "entry": ["src/index.ts", "src/**/*.test.ts"],
+    "loop": {
+      "entry": ["src/index.ts", "src/agents/write.ts", "src/**/*.test.ts"],
       "project": ["src/**/*.ts"]
-    },
-    "packages/sdk": {
-      "entry": ["src/index.ts", "src/**/*.test.ts"],
-      "project": ["src/**/*.ts"]
-    },
-    "packages/mcp": {
-      "entry": ["src/index.ts", "src/**/*.test.ts"],
-      "project": ["src/**/*.ts"]
-    },
-    "apps/api": {
-      "entry": ["src/server.ts", "src/**/*.test.ts"],
-      "project": ["src/**/*.ts"]
-    },
-    "apps/demo": {
-      "entry": ["src/main.tsx", "server.mjs", "server.test.mjs", "src/**/*.test.{ts,tsx}"],
-      "project": ["src/**/*.{ts,tsx}", "*.{ts,mjs}"]
     }
   }
 }

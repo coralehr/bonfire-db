@@ -1,25 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { checkAllowedPaths } from "./allowed-paths.js";
 import type { SliceContract } from "./slice-contract.js";
+import { makeSlice } from "./slice-fixture.js";
 
 function slice(allowedPaths: string[], forbiddenPaths: string[] = []): SliceContract {
-  return {
-    id: "BF-02",
-    title: "t",
-    profile: "data",
-    goal: "g",
-    why: "w",
-    dependsOn: ["BF-01"],
-    allowedPaths,
-    forbiddenPaths,
-    acceptance: ["a"],
-    verify: ["v"],
-    evals: [],
-    dangerChecks: [],
-    caps: { maxAttempts: 3, maxTurns: 40, maxBudgetUSD: 5 },
-    requiredAgents: ["maker", "verifier"],
-    greptileRequired: true
-  };
+  return makeSlice({ allowedPaths, forbiddenPaths });
 }
 
 describe("checkAllowedPaths — in/out of scope", () => {

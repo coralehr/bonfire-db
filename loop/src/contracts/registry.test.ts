@@ -1,32 +1,19 @@
 import { describe, expect, test } from "bun:test";
 import { allSlices, getSlice, validateEntries, validateRegistry } from "./registry.js";
+import type { SliceContract } from "./slice-contract.js";
+import { makeSlice } from "./slice-fixture.js";
 
 const EXPECTED_IDS = Array.from(
   { length: 12 },
   (_unused, index) => `BF-${String(index + 1).padStart(2, "0")}`
 );
 
-function validSlice(id: string, dependsOn: string[] = []): Record<string, unknown> {
-  return {
-    id,
-    title: `slice ${id}`,
-    profile: "foundation",
-    goal: "g",
-    why: "w",
-    dependsOn,
-    allowedPaths: ["packages/**"],
-    forbiddenPaths: [],
-    acceptance: ["a"],
-    verify: ["v"],
-    evals: [],
-    dangerChecks: [],
-    caps: { maxAttempts: 3, maxTurns: 40, maxBudgetUSD: 5 },
-    requiredAgents: ["maker", "verifier"],
-    greptileRequired: true
-  };
+function validSlice(id: string, dependsOn: string[] = []): SliceContract {
+  return makeSlice({ id, title: `slice ${id}`, profile: "foundation", dependsOn });
 }
 
-function twelve(): Record<string, unknown>[] {
+// unknown[] (not SliceContract[]) lets failure tests splice in junk entries.
+function twelve(): unknown[] {
   return EXPECTED_IDS.map((id) => validSlice(id));
 }
 

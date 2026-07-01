@@ -402,7 +402,9 @@ H0  Repo skeleton: Bun workspace, strict tsconfig + project refs, formatter,
     Wire the agent search stack (native lexical + ast-grep + Serena MCP, A6).
 H1  Human-authored slice registry (Zod) reviewed once vs mvp-demo-plan.md (v2),
     carrying BF-01..BF-12 IDs + acceptance; allowed-paths diff check.
-H2  Agent + skill single-source generators (.claude + .codex, with drift test).
+H2  Agent single-source generators (.claude + .codex, drift round-trip test).
+    Skill generators are moved to a post-H3 phase: skills invoke the `loop` CLI
+    (H3), so generating them before that CLI exists would ship half-baked skills.
 H3  Deterministic gate runners (Stage 0/1) + `loop gate` + worktree isolation.
 H4  Memory spine: STATE ledger + bug-patterns KB + `loop ratchet`, seeded with
     historical incident classes. Verifier VERDICT schema. Greptile + human gate.
@@ -574,7 +576,7 @@ T8 + mandatory weekly human review (the residual risk the tiered A3 posture acce
 |---|---|---|
 | H0 skeleton | root configs, CI, `.mcp.json` | — |
 | H1 slice registry | `loop/contracts` | H0 |
-| H2 generators | `loop/agents`, `loop/skills` | H0 |
+| H2 generators | `loop/agents` (skills deferred post-H3) | H0 |
 | H4 memory | `loop/memory` | H0 |
 | H3 gates+worktree+cli | `loop/gates`, `loop/cli` | H0, H1 |
 | Phase 2 BF-01→BF-02 | `packages/`, `apps/`, `drizzle/`, `seed/` | H0–H4 |
