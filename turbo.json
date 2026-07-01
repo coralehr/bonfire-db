@@ -23,7 +23,8 @@
     },
     "test": {
       "dependsOn": ["^build"],
-      "outputs": ["coverage/**"]
+      "outputs": ["coverage/**"],
+      "env": ["DB_HOST_PORT", "DATABASE_URL", "MIGRATE_DATABASE_URL", "API_PORT"]
     },
     "gate": {
       "dependsOn": ["typecheck", "lint", "test", "build"],

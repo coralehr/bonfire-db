@@ -1,8 +1,4 @@
 {
   "files": [],
-  "references": [
-    { "path": "./loop" },
-    { "path": "./packages/core" },
-    { "path": "./apps/api" }
-  ]
+  "references": [{ "path": "./loop" }, { "path": "./packages/core" }, { "path": "./apps/api" }]
 }
