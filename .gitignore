@@ -35,6 +35,9 @@ fixtures/private/
 # Local agent / tooling state
 .gstack/
 
+# Per-agent worktrees (loop worktree) — ephemeral, same-volume, never committed
+.worktrees/
+
 # Key & certificate material — never commit
 *.pem
 *.key

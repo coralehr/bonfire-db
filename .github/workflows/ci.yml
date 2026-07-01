@@ -174,13 +174,13 @@ jobs:
         run: ./gitleaks git . --config .gitleaks.toml --redact --no-banner --exit-code 1
 
   # ---------------------------------------------------------------------------
-  # ADVISORY (Phase-1 bring-up) — report but never block. They graduate to
-  # BLOCKING by the end of Phase 2 (loop-harness-plan.md, T6).
+  # BLOCKING — code-quality gates. knip (dead code / unused deps) and jscpd
+  # (duplication) graduated from advisory to blocking (T6, loop-harness-plan.md)
+  # now that the tree is green; a regression here fails the run like any gate.
   # ---------------------------------------------------------------------------
-  advisory:
-    name: advisory / ${{ matrix.tool }}
+  quality:
+    name: quality / ${{ matrix.tool }}
     runs-on: ubuntu-latest
-    continue-on-error: true
     strategy:
       fail-fast: false
       matrix:
