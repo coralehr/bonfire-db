@@ -1,0 +1,21 @@
+{
+  "name": "@bonfire/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b --noEmit",
+    "lint": "eslint .",
+    "test": "bun test --pass-with-no-tests",
+    "gate": "echo gated",
+    "start": "bun src/server.ts"
+  },
+  "dependencies": {
+    "@bonfire/core": "workspace:*",
+    "fastify": "^5.9.0",
+    "fastify-type-provider-zod": "^7.0.0",
+    "postgres": "^3.4.7",
+    "zod": "4.4.3"
+  }
+}

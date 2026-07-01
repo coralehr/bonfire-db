@@ -18,6 +18,7 @@
     "format": "biome check --write .",
     "test": "turbo run test",
     "gate": "turbo run gate",
+    "db:migrate": "bun run packages/core/src/db/migrate.ts",
     "gen:agents": "bun run loop/src/agents/write.ts",
     "loop": "bun run loop/src/cli/bin.ts"
   },

@@ -1,0 +1,78 @@
+# Bonfire DB — zero-key clean-clone boot (BF-01).
+#
+# Every env var carries an inline SYNTHETIC default (compose does not read
+# .env.example), so `docker compose up -d --wait` works on a clean clone with no
+# API keys and no manual secret entry. All defaults are obviously synthetic
+# ("dev-only"); .env.example documents the same variables.
+#
+# db notes:
+#   - pgvector/pgvector pinned by digest (pgvector 0.8.4 on Postgres 18).
+#   - PG18 images moved PGDATA: the named volume MUST mount /var/lib/postgresql
+#     (NOT /var/lib/postgresql/data — that path silently loses data on PG18).
+#   - Port published on loopback only.
+#   - Healthcheck is a real SQL probe over TCP as the runtime app role
+#     (bonfire_app): bare pg_isready reports ready during the initdb temp server
+#     (unix-socket only, double start), which would let --wait return early.
+services:
+  db:
+    image: pgvector/pgvector:0.8.4-pg18@sha256:212765b63c1462883de295c4c415edcd22191b8d8d46853e86ad05d4b577a4cb
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-bonfire}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bonfire-dev-only-superuser-pw}
+      # Read by docker/initdb/010-roles.sh (app role) and by the healthcheck.
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:-bonfire-dev-only-app-pw}
+    ports:
+      # Published HOST port only — container port and api->db wiring stay 5432.
+      - "127.0.0.1:${DB_HOST_PORT:-5432}:5432"
+    volumes:
+      - db-data:/var/lib/postgresql
+      - ./docker/initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "PGPASSWORD=$$APP_DB_PASSWORD psql -h 127.0.0.1 -U bonfire_app -d bonfire -tAc 'SELECT 1' >/dev/null"
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+      start_interval: 2s
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    ports:
+      - "${API_PORT:-8080}:8080"
+    environment:
+      # Discrete parts (no credentialed URL literal); @bonfire/core assembles
+      # the connection from these. The app connects ONLY as bonfire_app.
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_USER: bonfire_app
+      DB_NAME: ${POSTGRES_DB:-bonfire}
+      DB_PASSWORD: ${APP_DB_PASSWORD:-bonfire-dev-only-app-pw}
+      PORT: "8080"
+    depends_on:
+      db:
+        condition: service_healthy
+        restart: true
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "bun",
+          "-e",
+          "fetch('http://localhost:8080/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      # Generous: the first up builds the image and boots bun before probing.
+      start_period: 60s
+      start_interval: 3s
+
+volumes:
+  db-data:
