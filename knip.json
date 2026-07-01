@@ -3,6 +3,7 @@
   "ignore": ["**/*.d.ts"],
   "ignoreBinaries": ["bun", "docker"],
   "ignoreUnresolved": ["^bun:"],
+  "ignoreDependencies": ["@ast-grep/cli", "jscpd"],
   "workspaces": {
     "loop": {
       "entry": ["src/index.ts", "src/agents/write.ts", "src/**/*.test.ts"],
