@@ -110,11 +110,16 @@ jobs:
       # green. If compose exists, boot MUST succeed — no fail-open skip.
       - name: Boot product stack (DB-backed tests)
         if: matrix.task == 'test'
+        # Mirrors the slice verify[] boot order: migrate then seed, so
+        # DB-backed tests (e.g. the seeded-state contract) run against the
+        # same synthetic state the contract establishes. The seed is
+        # idempotent and only runs once the seeder exists.
         run: |
           set -euo pipefail
           if [ -f docker-compose.yml ]; then
             docker compose up -d --wait
             bun run db:migrate
+            if [ -f seed/index.ts ]; then bun run seed; fi
           else
             echo "no docker-compose.yml yet; nothing to boot"
           fi

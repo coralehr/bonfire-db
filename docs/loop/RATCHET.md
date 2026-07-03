@@ -5,7 +5,7 @@
 > `loop ratchet` (and the test suite): if the guard artifact disappears,
 > the check fails and the bug is considered reopened.
 
-14 guarded · 9 open (debt owed a guard)
+14 guarded · 10 open (debt owed a guard)
 
 ## BP-001 — gate-crash-read-as-pass — GUARDED
 
@@ -189,4 +189,12 @@
 - Root cause: The Dockerfile enumerates each workspace manifest to COPY, so a newly-declared workspace whose manifest is not added is absent when bun resolves the workspace graph — and local compose runs don't rebuild the image, hiding it.
 - Fix: COPY seed/package.json in both the deps and runtime stages (mirroring loop/); full `docker build` reproduced the failure and confirmed the fix. The docker-invariants test now asserts every non-glob root workspace has a matching COPY in the Dockerfile.
 - Guard: `test` → `loop/src/gates/docker-invariants.test.ts::every non-glob root workspace manifest is COPYed for install`
+- Recorded: 2026-07-03
+
+## BP-024 — db-test-depends-on-unrun-boot-step — OPEN
+
+- Symptom: seeded-state.test.ts asserts seed row counts but does not seed; it passed locally (operator ran `bun run seed` first per the verify[] order) and failed in CI, whose generic `turbo run test` boot only migrated. Green locally, red on a fresh CI runner.
+- Root cause: A DB-backed test carried an implicit precondition (the seed having run) that it did not establish itself, so correctness depended on the runner's boot order rather than the test.
+- Fix: CI boot step now mirrors the slice verify[] order (migrate then seed) so the DB-backed tests run against the same synthetic state the contract establishes. The durable fix — make DB-backed tests self-seed (hermetic) so no bare `bun test` depends on boot order — is owed.
+- Planned guard: hermetic DB tests: a shared test-setup that seeds idempotently in beforeAll (or moves the seed-contract test into the seed workspace where it can import + run the seeder), so ordering is never implicit — build with BF-03's write-path tests
 - Recorded: 2026-07-03

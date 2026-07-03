@@ -75,9 +75,9 @@ describe("the real KB", () => {
     expect(r.ok).toBe(true);
     if (r.ok) {
       // 8 seeded classes (BP-001..008) + 6 from the BF-01 run (BP-009..014)
-      // + 9 confirmed during the BF-02 run, its audit, the refutation swarm, and CI (BP-015..023).
+      // + 10 confirmed during the BF-02 run, its audit, the refutation swarm, and CI (BP-015..024).
       // Deliberately pinned: growing the KB means growing this expectation.
-      expect(r.value).toHaveLength(23);
+      expect(r.value).toHaveLength(24);
       const classes = r.value.map((e) => e.class);
       expect(classes).toContain("gate-crash-read-as-pass");
       expect(classes).toContain("cross-tenant-leak");
