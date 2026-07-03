@@ -5,7 +5,7 @@
 > `loop ratchet` (and the test suite): if the guard artifact disappears,
 > the check fails and the bug is considered reopened.
 
-7 guarded · 7 open (debt owed a guard)
+8 guarded · 6 open (debt owed a guard)
 
 ## BP-001 — gate-crash-read-as-pass — GUARDED
 
@@ -111,10 +111,10 @@
 - Guard: `test` → `loop/src/gates/docker-invariants.test.ts::published host ports bind loopback only`
 - Recorded: 2026-07-03
 
-## BP-014 — rls-guc-cast-error-channel — OPEN
+## BP-014 — rls-guc-cast-error-channel — GUARDED
 
 - Symptom: A garbage (non-UUID, non-empty) app.current_practice_id makes every query on an RLS-scoped table raise 22P02 invalid input syntax instead of returning zero rows — tenant scoping degrades into an error channel that callers can catch, retry without context, or surface as 500s.
 - Root cause: The policy predicate casts the GUC with a bare ::uuid, which throws on malformed input; NULLIF folds only the empty string, not arbitrary garbage.
-- Fix: Harden the policy template with a safe_uuid() helper (garbage folds to NULL; a NULL predicate is zero rows) via a forward-only migration in the BF-02 prep commit, BEFORE BF-02 stamps the policy onto fhir_resources/history/write_inputs.
-- Planned guard: BF-02 prep-commit migration adding safe_uuid() + policy rewrite, proven by a packages/core/src/db/rls.test.ts case asserting a garbage GUC yields zero rows, not an error (flip to guarded in the BF-02 PR wave)
+- Fix: Migration 0001_rls_safe_uuid: safe_uuid() (STABLE, pg_input_is_valid; garbage folds to NULL, NULL predicate = zero rows) and the rls_scaffold policy rewritten onto the InitPlan-wrapped (SELECT safe_uuid(...)) template — the template BF-02 stamps onto fhir_resources/history/write_inputs.
+- Guard: `test` → `packages/core/src/db/rls.test.ts::a garbage practice context yields zero rows`
 - Recorded: 2026-07-03
