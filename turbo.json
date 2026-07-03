@@ -11,11 +11,11 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**", "build/**", "**/*.tsbuildinfo"]
+      "outputs": ["dist/**", "build/**"]
     },
     "typecheck": {
-      "dependsOn": ["^typecheck"],
-      "outputs": ["dist/**", "**/*.tsbuildinfo"]
+      "dependsOn": ["^build"],
+      "outputs": []
     },
     "lint": {
       "dependsOn": [],

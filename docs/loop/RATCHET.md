@@ -5,7 +5,7 @@
 > `loop ratchet` (and the test suite): if the guard artifact disappears,
 > the check fails and the bug is considered reopened.
 
-8 guarded · 6 open (debt owed a guard)
+10 guarded · 6 open (debt owed a guard)
 
 ## BP-001 — gate-crash-read-as-pass — GUARDED
 
@@ -117,4 +117,20 @@
 - Root cause: The policy predicate casts the GUC with a bare ::uuid, which throws on malformed input; NULLIF folds only the empty string, not arbitrary garbage.
 - Fix: Migration 0001_rls_safe_uuid: safe_uuid() (STABLE, pg_input_is_valid; garbage folds to NULL, NULL predicate = zero rows) and the rls_scaffold policy rewritten onto the InitPlan-wrapped (SELECT safe_uuid(...)) template — the template BF-02 stamps onto fhir_resources/history/write_inputs.
 - Guard: `test` → `packages/core/src/db/rls.test.ts::a garbage practice context yields zero rows`
+- Recorded: 2026-07-03
+
+## BP-015 — jsonb-param-double-encode — GUARDED
+
+- Symptom: fhir_resources/history content rows held jsonb STRING SCALARS (serialized JSON inside a JSON string) instead of documents; reads that navigated the document returned undefined and re-canonicalized hashes diverged from the stored content_hash.
+- Root cause: `${JSON.stringify(doc)}::jsonb` through postgres.js binds the string with the jsonb parameter type, so the cast is a no-op on an already-jsonb string value — the document is double-encoded (live probe: jsonb_typeof = 'string'; sql.json(doc) yields 'object').
+- Fix: All six content-write sites use sql.json(doc); the idiom is purged from tests; the fhir-rls schema-catalog test asserts jsonb_typeof(content) = 'object' over every stored row (inversion-proof); the maker's own read-back parity test is what caught the corruption pre-merge.
+- Guard: `semgrep` → `bonfire-jsonb-stringify-double-encode`
+- Recorded: 2026-07-03
+
+## BP-016 — cache-restore-clobbers-workspace-symlink — GUARDED
+
+- Symptom: apps/api's @bonfire/core resolved to an empty husk (a real directory holding one stray .tsbuildinfo) after turbo cache activity: typed lint failed with 'type could not be resolved' across the api while root-invoked runs stayed green.
+- Root cause: turbo task output globs `**/*.tsbuildinfo` walked THROUGH the node_modules workspace symlink during output capture; a later cache restore materialized the captured path as a real directory OVER the symlink, shadowing the package.
+- Fix: Output globs scoped to the workspace's own build dirs (dist/**, build/**); the noEmit typecheck task declares no outputs and dependsOn ^build so referenced dist is always fresh; poisoned cache purged; the turbo-outputs test rejects any output glob starting at ** or touching node_modules.
+- Guard: `test` → `loop/src/gates/turbo-outputs.test.ts::output globs never start at ** or traverse node_modules`
 - Recorded: 2026-07-03

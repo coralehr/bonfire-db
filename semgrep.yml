@@ -214,6 +214,34 @@ rules:
         - "**/*.spec.ts"
 
   # --------------------------------------------------------------------------
+  # RATCHET BP-015 — stringified document cast to ::jsonb double-encodes.
+  # postgres.js sends an interpolated JS string with the jsonb parameter type,
+  # so `${JSON.stringify(doc)}::jsonb` stores a jsonb STRING SCALAR containing
+  # serialized JSON, not a document (proven by live probe: jsonb_typeof =
+  # 'string'). The sanctioned form is sql.json(doc), which stores an object.
+  # --------------------------------------------------------------------------
+  - id: bonfire-jsonb-stringify-double-encode
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >-
+      JSON.stringify(...) interpolated into a SQL template and cast to ::jsonb
+      stores a jsonb string scalar (double-encoded document), never a jsonb
+      document. Use sql.json(value) instead — it binds the value as a real
+      jsonb object. (Ratchet BP-015; the jsonb_typeof guard test asserts the
+      stored shape.)
+    metadata:
+      category: correctness
+      subcategory: [vuln]
+      confidence: HIGH
+      likelihood: HIGH
+      impact: HIGH
+      ratchet: BP-015
+      references:
+        - https://github.com/porsager/postgres#json
+    patterns:
+      - pattern-regex: '\$\{\s*JSON\.stringify\([^`]*?\)\s*\}\s*::\s*jsonb'
+
+  # --------------------------------------------------------------------------
   # HEALTHCARE CUSTOM RULE 2 — Authorization must be DENY-BY-DEFAULT. Flags the
   # allow-by-default shape (a mutable decision initialized to allow/true that
   # later gets flipped to deny), which fails open whenever a check is skipped.

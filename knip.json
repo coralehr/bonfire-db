@@ -1,57 +1,29 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "ignore": [
-    "**/*.d.ts"
-  ],
-  "ignoreBinaries": [
-    "bun",
-    "docker"
-  ],
-  "ignoreUnresolved": [
-    "^bun:"
-  ],
-  "ignoreDependencies": [
-    "@ast-grep/cli",
-    "jscpd"
-  ],
+  "ignore": ["**/*.d.ts"],
+  "ignoreBinaries": ["bun", "docker"],
+  "ignoreUnresolved": ["^bun:"],
+  "ignoreDependencies": ["@ast-grep/cli", "jscpd"],
   "workspaces": {
     "loop": {
-      "entry": [
-        "src/index.ts",
-        "src/agents/write.ts",
-        "src/**/*.test.ts"
-      ],
-      "project": [
-        "src/**/*.ts"
-      ]
+      "entry": ["src/index.ts", "src/agents/write.ts", "src/**/*.test.ts"],
+      "project": ["src/**/*.ts"]
     },
     "packages/core": {
-      "entry": [
-        "src/index.ts",
-        "src/**/*.test.ts"
-      ],
-      "project": [
-        "src/**/*.ts"
-      ]
+      "entry": ["src/index.ts", "src/**/*.test.ts"],
+      "project": ["src/**/*.ts"]
     },
     "apps/api": {
-      "entry": [
-        "src/server.ts",
-        "src/**/*.test.ts"
-      ],
-      "project": [
-        "src/**/*.ts"
-      ]
+      "entry": ["src/server.ts", "src/**/*.test.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "seed": {
+      "entry": ["index.ts"],
+      "project": ["**/*.ts"]
     },
     ".": {
-      "entry": [
-        "seed/index.ts",
-        "scripts/synthetic-scan/index.ts"
-      ],
-      "project": [
-        "seed/**/*.ts",
-        "scripts/synthetic-scan/**/*.ts"
-      ]
+      "entry": ["scripts/synthetic-scan/index.ts"],
+      "project": ["scripts/synthetic-scan/**/*.ts"]
     }
   }
 }
