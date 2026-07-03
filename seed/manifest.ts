@@ -17,7 +17,7 @@ const manifestFileSchema = z.object({
   sha256: z.string().min(1)
 });
 
-export const corpusManifestSchema = z.object({
+const corpusManifestSchema = z.object({
   source: z.string().min(1),
   practices: z.tuple([z.uuid(), z.uuid()]),
   files: z.array(manifestFileSchema).min(1)
@@ -31,7 +31,7 @@ export function normalizeLf(text: string): string {
   return text.replaceAll("\r\n", "\n");
 }
 
-export function sha256Hex(text: string): string {
+function sha256Hex(text: string): string {
   return createHash("sha256").update(text, "utf8").digest("hex");
 }
 

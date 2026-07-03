@@ -129,11 +129,9 @@ describe("schema catalog", () => {
   });
 
   test("bonfire_app NOSUPERUSER NOBYPASSRLS", async () => {
-    const rows = await sql<{ rolsuper: boolean; rolbypassrls: boolean }[]>`
+    const [role] = await sql<{ rolsuper: boolean; rolbypassrls: boolean }[]>`
       select rolsuper, rolbypassrls from pg_roles where rolname = 'bonfire_app'`;
-    expect(rows.length).toBe(1);
-    expect(rows[0]?.rolsuper).toBe(false);
-    expect(rows[0]?.rolbypassrls).toBe(false);
+    expect(role).toEqual({ rolsuper: false, rolbypassrls: false });
   });
 
   test("append-only grants: no UPDATE/DELETE on the three immutable tables", async () => {
