@@ -5,7 +5,7 @@
 > `loop ratchet` (and the test suite): if the guard artifact disappears,
 > the check fails and the bug is considered reopened.
 
-3 guarded · 5 open (debt owed a guard)
+7 guarded · 7 open (debt owed a guard)
 
 ## BP-001 — gate-crash-read-as-pass — GUARDED
 
@@ -70,3 +70,51 @@
 - Fix: FHIR R4 JSONB is canonical and the typed primitive is a projection; any dropped field requires a loss-ledger entry with ADR + human sign-off (BF-03).
 - Planned guard: eval: FHIR R4 round-trip eval (BF-03/T9, loop/evals)
 - Recorded: 2026-06-25
+
+## BP-009 — hardcoded-host-port-collision — GUARDED
+
+- Symptom: docker compose up failed on hosts where the published host port was already taken: a local Postgres on 5432 collided with the db service's fixed bind, and a collision can silently point tests at the wrong server.
+- Root cause: Published host ports were fixed literals in docker-compose.yml, so the host environment could not remap them.
+- Fix: Every published port is env-overridable with a synthetic default (127.0.0.1:${DB_HOST_PORT:-5432}:5432, 127.0.0.1:${API_PORT:-8080}:8080); dev hosts with a local Postgres export DB_HOST_PORT=55432.
+- Guard: `test` → `loop/src/gates/docker-invariants.test.ts::published host ports are env-overridable`
+- Recorded: 2026-07-03
+
+## BP-010 — bun-isolated-linker-breaks-docker-copy — GUARDED
+
+- Symptom: The api image built but the runtime stage was missing workspace dependencies: the node_modules copied into the image resolved to dangling symlinks.
+- Root cause: bun 1.3's default isolated linker lays out per-workspace node_modules as symlinks into a central store, which a single-directory Docker COPY of node_modules does not preserve.
+- Fix: docker/api.Dockerfile installs with bun install --frozen-lockfile --production --linker hoisted so all packages land under root node_modules and survive the COPY (rationale pinned in the Dockerfile).
+- Guard: `test` → `loop/src/gates/docker-invariants.test.ts::api image bun install uses the hoisted linker`
+- Recorded: 2026-07-03
+
+## BP-011 — gate-false-positive-pushes-unsafe-workaround — OPEN
+
+- Symptom: The template clause of semgrep rule bonfire-mcp-tool-raw-sql-concat flagged postgres.js sql tagged-template queries — the safe, bound-parameter idiom — so BF-01 shipped a sql.unsafe(constantLiteral, [params]) workaround to pass the gate: the gate steered code toward a less-reviewable API.
+- Root cause: A text regex cannot distinguish a tagged template (interpolations bound as parameters by the sql tag) from an untagged template literal that splices values into statement text.
+- Fix: Operator-reviewed refinement: templates tagged exactly sql are exempted via pattern-not-regex; untagged SQL-shaped templates, string concat, near-miss tags (mysql/rawsql), and unsafe() with interpolation all remain banned; inline suppressions stay banned by the suppressions gate.
+- Planned guard: semgrep behaviour-test corpus (semgrep --test fixtures proving sql tagged templates pass and untagged interpolation fails) wired into the semgrep gate — queue with the BF-02 wave, alongside restoring tenant.ts's tagged template
+- Recorded: 2026-07-03
+
+## BP-012 — raw-db-client-bypasses-tenant-boundary — GUARDED
+
+- Symptom: Nothing stopped product code from constructing its own postgres.js client and querying outside withTenant(), running statements with no tenant GUC bound — one privileged role or pooling misconfiguration away from a cross-tenant read.
+- Root cause: @bonfire/core deliberately does not export its client factory, but any file could import postgres directly and mint a connection that skips the tenant boundary.
+- Fix: ast-grep rule no-raw-postgres-client bans value imports of postgres outside packages/core/src/db/**; sanctioned, documented exemptions: the api /health catalog probe (apps/api/src/app.ts, non-tenant, connects as bonfire_app), seed/** and scripts/** dev surfaces, and test files (isolation proofs).
+- Guard: `ast-grep` → `sgrules/no-raw-postgres-client.yml`
+- Recorded: 2026-07-03
+
+## BP-013 — service-port-published-beyond-loopback — GUARDED
+
+- Symptom: The api service published its port on 0.0.0.0: every docker compose up exposed the dev API — and the tenant data it fronts — to the local network.
+- Root cause: The compose port mapping omitted the loopback host prefix and nothing checked published bind addresses.
+- Fix: api publishes 127.0.0.1:${API_PORT:-8080}:8080 (db was already loopback-only); the docker-invariants test rejects any published port that does not bind 127.0.0.1.
+- Guard: `test` → `loop/src/gates/docker-invariants.test.ts::published host ports bind loopback only`
+- Recorded: 2026-07-03
+
+## BP-014 — rls-guc-cast-error-channel — OPEN
+
+- Symptom: A garbage (non-UUID, non-empty) app.current_practice_id makes every query on an RLS-scoped table raise 22P02 invalid input syntax instead of returning zero rows — tenant scoping degrades into an error channel that callers can catch, retry without context, or surface as 500s.
+- Root cause: The policy predicate casts the GUC with a bare ::uuid, which throws on malformed input; NULLIF folds only the empty string, not arbitrary garbage.
+- Fix: Harden the policy template with a safe_uuid() helper (garbage folds to NULL; a NULL predicate is zero rows) via a forward-only migration in the BF-02 prep commit, BEFORE BF-02 stamps the policy onto fhir_resources/history/write_inputs.
+- Planned guard: BF-02 prep-commit migration adding safe_uuid() + policy rewrite, proven by a packages/core/src/db/rls.test.ts case asserting a garbage GUC yields zero rows, not an error (flip to guarded in the BF-02 PR wave)
+- Recorded: 2026-07-03

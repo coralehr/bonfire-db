@@ -1,1 +1,2 @@
 {"ts":"2026-07-01T21:15:20.255Z","slice":"BF-01","state":"active","actor":"operator","note":"BF-01 loop run 1: planner+maker+verifier+security-auditor"}
+{"ts":"2026-07-03T11:16:57.383Z","slice":"BF-01","state":"done","actor":"operator","note":"merged as PR #9; verify chain executed live; verdict PASS; auditor findings recorded as BP-012..BP-014"}
