@@ -14,7 +14,7 @@ function indent(text: string): string {
     .join("\n");
 }
 
-export function renderReportHuman(report: GateReport): string {
+export function renderReportHuman(report: GateReport, label: "gate" | "eval" = "gate"): string {
   const lines: string[] = [];
   for (const result of report.results) {
     if (result.status === "fail") {
@@ -33,12 +33,12 @@ export function renderReportHuman(report: GateReport): string {
   const mark = report.ok ? "✓" : "✗";
   const verdict = report.ok ? "PASS" : "FAIL";
   const tally = `${String(passed)} passed, ${String(failed)} failed, ${String(skipped)} skipped`;
-  lines.push(`${mark} gate ${verdict} — ${tally}`);
+  lines.push(`${mark} ${label} ${verdict} — ${tally}`);
   return `${lines.join("\n")}\n`;
 }
 
 export interface GateReportJson {
-  readonly command: "gate";
+  readonly command: "gate" | "eval";
   readonly status: "pass" | "fail";
   readonly exitCode: 0 | 1;
   readonly gates: readonly {
@@ -54,9 +54,12 @@ export interface GateReportJson {
   readonly skippedStages: readonly number[];
 }
 
-export function reportToJson(report: GateReport): GateReportJson {
+export function reportToJson(
+  report: GateReport,
+  command: "gate" | "eval" = "gate"
+): GateReportJson {
   return {
-    command: "gate",
+    command,
     status: report.ok ? "pass" : "fail",
     exitCode: report.ok ? 0 : 1,
     gates: report.results.map((r) => ({

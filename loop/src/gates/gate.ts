@@ -10,8 +10,13 @@
  */
 import { type CommandRunner, commandDetail, failureReason } from "./exec.js";
 
-/** 0 = fast hooks (format/typecheck/lint); 1 = full deterministic stack. */
-export type GateStage = 0 | 1;
+/**
+ * 0 = fast hooks (format/typecheck/lint); 1 = full deterministic stack;
+ * 2 = execution-watching evals (run the built artifact, assert behavior).
+ * `runGates` orders stages numerically and short-circuits between them, so a
+ * red Stage 0/1 never burns Stage 2 (BP-002).
+ */
+export type GateStage = 0 | 1 | 2;
 
 /** blocking = a failure fails the run; advisory = reported, does not block. */
 export type GateTier = "blocking" | "advisory";

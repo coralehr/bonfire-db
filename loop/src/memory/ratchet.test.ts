@@ -96,6 +96,22 @@ describe("checkGuard — ref grammar", () => {
       })
     ).toBeNull();
   });
+
+  test("an eval ref without '::' is rejected (containment grammar)", () => {
+    expect(checkGuard(REPO_ROOT, { type: "eval", ref: "loop/evals/bf02.jsonl" })).toContain("::");
+  });
+
+  test("the real BP-017 eval guard proves out; a deleted eval id reopens it", () => {
+    expect(
+      checkGuard(REPO_ROOT, {
+        type: "eval",
+        ref: "loop/evals/bf02.jsonl::bf02-scanner-error-redacts-content"
+      })
+    ).toBeNull();
+    expect(
+      checkGuard(REPO_ROOT, { type: "eval", ref: "loop/evals/bf02.jsonl::bf02-gone" })
+    ).toContain("execution eval is gone");
+  });
 });
 
 describe("renderRatchetDoc", () => {

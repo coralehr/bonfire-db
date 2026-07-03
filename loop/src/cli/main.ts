@@ -6,6 +6,7 @@
  * Any unexpected throw becomes exit 3 (internal), so a harness bug is loud, not a
  * silent zero.
  */
+import { runEvalCommand } from "./commands/eval.js";
 import { runGateCommand } from "./commands/gate.js";
 import { runRatchetCommand } from "./commands/ratchet.js";
 import { runStateCommand } from "./commands/state.js";
@@ -33,6 +34,9 @@ usage:
   loop state list [--json]
   loop state set <slice> <inbox|active|done|failed> [--note <text>] [--actor <name>]
       read/append the slice STATE ledger (loop/memory/state.jsonl).
+  loop eval [--slice <id>] [--strict] [--json]
+      run the Stage-2 execution-watching eval corpus (loop/evals/**),
+      fail-closed. --slice runs only that slice's cases.
 
 global:
   --help, -h     show this help
@@ -43,6 +47,7 @@ type CommandHandler = (io: CliIO, args: readonly string[]) => number;
 
 const COMMANDS: Readonly<Record<string, CommandHandler>> = {
   gate: runGateCommand,
+  eval: runEvalCommand,
   worktree: runWorktreeCommand,
   ratchet: runRatchetCommand,
   state: runStateCommand

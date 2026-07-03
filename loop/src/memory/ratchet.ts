@@ -59,15 +59,21 @@ function checkSemgrepGuard(repoRoot: string, ref: string): string | null {
   return null;
 }
 
-function checkTestGuard(repoRoot: string, ref: string): string | null {
-  const [file, testName] = ref.split("::");
-  if (file === undefined || testName === undefined || testName.length === 0) {
-    return `test guard ref must be "<file>::<test-name>": ${ref}`;
+/** Shared "<file>::<needle>" containment check: file exists and contains needle. */
+function checkContainmentGuard(
+  repoRoot: string,
+  ref: string,
+  kind: string,
+  gonePhrase: string
+): string | null {
+  const [file, needle] = ref.split("::");
+  if (file === undefined || needle === undefined || needle.length === 0) {
+    return `${kind} guard ref must be "<file>::<${kind === "test" ? "test-name" : "id"}>": ${ref}`;
   }
   const path = join(repoRoot, file);
-  if (!existsSync(path)) return `test file missing: ${file}`;
-  if (!readFileSync(path, "utf8").includes(testName)) {
-    return `test "${testName}" not found in ${file} — the regression guard is gone`;
+  if (!existsSync(path)) return `${kind} file missing: ${file}`;
+  if (!readFileSync(path, "utf8").includes(needle)) {
+    return `${kind} "${needle}" not found in ${file} — ${gonePhrase}`;
   }
   return null;
 }
@@ -80,8 +86,10 @@ export function checkGuard(repoRoot: string, guard: Guard): string | null {
     case "semgrep":
       return checkSemgrepGuard(repoRoot, guard.ref);
     case "test":
-      return checkTestGuard(repoRoot, guard.ref);
+      return checkContainmentGuard(repoRoot, guard.ref, "test", "the regression guard is gone");
     case "eval":
+      // "<corpus-file>::<eval-id>" — deleting the eval case reopens the bug.
+      return checkContainmentGuard(repoRoot, guard.ref, "eval", "the execution eval is gone");
     case "checklist":
       return existsSync(join(repoRoot, guard.ref)) ? null : `guard artifact missing: ${guard.ref}`;
   }

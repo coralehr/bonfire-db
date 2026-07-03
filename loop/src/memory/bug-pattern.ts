@@ -14,8 +14,10 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
+import type { JsonlFailure } from "../contracts/jsonl.js";
+import { parseJsonlRecords } from "../contracts/jsonl.js";
 import type { Result } from "../contracts/result.js";
-import { err, ok } from "../contracts/result.js";
+import { err } from "../contracts/result.js";
 
 export const BUG_PATTERNS_FILE = "loop/memory/bug-patterns.jsonl";
 
@@ -68,42 +70,12 @@ export const bugPatternSchema = z
   });
 export type BugPattern = z.infer<typeof bugPatternSchema>;
 
-export interface BugPatternsFailure {
-  readonly issues: readonly string[];
-}
+/** Structural alias of the shared JSONL failure — kept for existing importers. */
+export type BugPatternsFailure = JsonlFailure;
 
 /** Parse + validate KB text. Strict: every line must be a valid entry; ids unique. */
 export function parseBugPatterns(text: string): Result<readonly BugPattern[], BugPatternsFailure> {
-  const issues: string[] = [];
-  const entries: BugPattern[] = [];
-  const seen = new Set<string>();
-
-  const lines = text.split("\n");
-  for (const [index, line] of lines.entries()) {
-    const lineNo = String(index + 1);
-    if (line.trim().length === 0) continue;
-    let raw: unknown;
-    try {
-      raw = JSON.parse(line);
-    } catch {
-      issues.push(`line ${lineNo}: not valid JSON`);
-      continue;
-    }
-    const parsed = bugPatternSchema.safeParse(raw);
-    if (!parsed.success) {
-      const detail = parsed.error.issues.map((i) => i.message).join("; ");
-      issues.push(`line ${lineNo}: ${detail}`);
-      continue;
-    }
-    if (seen.has(parsed.data.id)) {
-      issues.push(`line ${lineNo}: duplicate id ${parsed.data.id}`);
-      continue;
-    }
-    seen.add(parsed.data.id);
-    entries.push(parsed.data);
-  }
-
-  return issues.length > 0 ? err({ issues }) : ok(entries);
+  return parseJsonlRecords(text, bugPatternSchema, (entry) => entry.id);
 }
 
 /** Load the real KB from the repo. A missing file is a loud failure, not empty memory. */

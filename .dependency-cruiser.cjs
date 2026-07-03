@@ -173,6 +173,7 @@ module.exports = {
           "\\.(test|spec)\\.(js|cjs|mjs|ts|cts|mts|jsx|tsx)$", // tests are run, not imported
           "(^|/)(server|main|index)\\.(js|cjs|mjs|ts|cts|mts|jsx|tsx)$", // entry points
           "^loop/cli/", // CLI commands are invoked by name, not imported
+          "^loop/src/evals/", // eval assertion scripts are run as `bun <path>` entry points (knip guards real dead code here)
           "^(scripts|seed|drizzle)/" // operational glue run as entry points
         ]
       },
