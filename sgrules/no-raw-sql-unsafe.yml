@@ -1,0 +1,62 @@
+# Raw-string sql.unsafe() (ratchet BP-020).
+# postgres.js `.unsafe(text)` runs `text` as statement text (simple protocol,
+# which accepts STACKED statements) with no parameter binding. A non-literal
+# argument — an identifier, a concatenation, a join()/concat() result, or an
+# interpolated template — means SQL text was BUILT FROM DATA and can carry
+# injection, including a smuggled `; set_config('app.current_practice_id', ...)`
+# that re-binds the transaction-local tenant GUC and reads another practice.
+# This is the sink the sql-template regex gates cannot fully see (they are
+# call-site/shape local); banning a non-literal .unsafe argument closes it and
+# also removes the only execution sink a fake `sql` tag could reach. A genuine
+# constant statement may pass a bare string literal (reviewed at the call site).
+id: no-raw-sql-unsafe
+language: TypeScript
+severity: error
+message: sql.unsafe() called with a non-literal argument — build queries with bound params, not statement text.
+note: |
+  `.unsafe(x)` executes x as raw statement text with no binding and accepts
+  stacked statements. Pass data through the `sql` tagged template (bound
+  params) or the typed write primitives instead. Only a bare string literal
+  (a fixed, reviewed statement) is permitted as the argument to `.unsafe`.
+metadata:
+  slop-pattern: raw-sql-execution-sink
+  gate-stage: 1
+  ratchet: BP-020
+# The semgrep behaviour corpus holds deliberately-bad .unsafe lines, enforced
+# by `semgrep scan --test`; ast-grep must not double-flag those fixtures.
+ignores:
+  - "sgrule-tests/**"
+rule:
+  any:
+    - pattern: $SINK.unsafe($ARG)
+    - pattern: $SINK.unsafe($ARG, $$$REST)
+constraints:
+  ARG:
+    not:
+      kind: string
+---
+id: no-raw-sql-unsafe-tsx
+language: Tsx
+severity: error
+message: sql.unsafe() called with a non-literal argument — build queries with bound params, not statement text.
+note: |
+  `.unsafe(x)` executes x as raw statement text with no binding and accepts
+  stacked statements. Pass data through the `sql` tagged template (bound
+  params) or the typed write primitives instead. Only a bare string literal
+  (a fixed, reviewed statement) is permitted as the argument to `.unsafe`.
+metadata:
+  slop-pattern: raw-sql-execution-sink
+  gate-stage: 1
+  ratchet: BP-020
+# The semgrep behaviour corpus holds deliberately-bad .unsafe lines, enforced
+# by `semgrep scan --test`; ast-grep must not double-flag those fixtures.
+ignores:
+  - "sgrule-tests/**"
+rule:
+  any:
+    - pattern: $SINK.unsafe($ARG)
+    - pattern: $SINK.unsafe($ARG, $$$REST)
+constraints:
+  ARG:
+    not:
+      kind: string

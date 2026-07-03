@@ -1,0 +1,17 @@
+{
+  "name": "@bonfire/seed",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b --noEmit",
+    "lint": "eslint .",
+    "test": "bun test --pass-with-no-tests",
+    "gate": "echo gated"
+  },
+  "dependencies": {
+    "@bonfire/core": "workspace:*",
+    "zod": "4.4.3"
+  }
+}

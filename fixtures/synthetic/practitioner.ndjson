@@ -1,0 +1,3 @@
+{"resourceType":"Practitioner","id":"practitioner-1","name":[{"family":"Kuhlman377","given":["Braulio143"],"prefix":["Dr."]}],"identifier":[{"system":"http://hl7.org/fhir/sid/us-npi","value":"9999999991"}]}
+{"resourceType":"Practitioner","id":"practitioner-2","name":[{"family":"Gleichner915","given":["Marcelina526"],"prefix":["Dr."]}],"identifier":[{"system":"http://hl7.org/fhir/sid/us-npi","value":"9999999992"}]}
+{"resourceType":"Practitioner","id":"practitioner-3","name":[{"family":"Hintz995","given":["Theodore976"],"prefix":["Dr."]}],"identifier":[{"system":"http://hl7.org/fhir/sid/us-npi","value":"9999999993"}]}

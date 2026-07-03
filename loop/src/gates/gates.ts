@@ -198,9 +198,22 @@ export const STANDARD_GATES: readonly Gate[] = [
         ".turbo",
         "--exclude",
         "coverage"
-      ]
+      ],
+      // Rule behaviour corpus (ratchet BP-011): annotated fixtures prove each
+      // rule fires on known-bad code and stays silent on sanctioned idioms —
+      // a rule edit that breaks either side fails the gate.
+      ["semgrep", "scan", "--test", "sgrule-tests/semgrep"]
     ],
     hint: "semgrep not installed (enforced in CI container)"
+  }),
+  // The synthetic-only tripwire as a PERMANENT gate, not a one-shot slice
+  // check: the scanner self-tests every detector class on each run (exit 2 if
+  // any fails to fire) before sweeping the committed fixture corpus.
+  commandGate({
+    name: "synthetic-only",
+    stage: 1,
+    tier: "blocking",
+    commands: [["bun", "run", "scan:synthetic"]]
   }),
   commandGate({ name: "knip", stage: 1, tier: "advisory", commands: [["bunx", "knip"]] }),
   commandGate({

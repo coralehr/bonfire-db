@@ -1,0 +1,59 @@
+# sql-tag impersonation (ratchet BP-011 hardening).
+# The semgrep SQL-template gate exempts templates tagged exactly `sql` because
+# postgres.js/Drizzle bind their interpolations as parameters. That exemption
+# is keyed on the identifier NAME, so declaring a local function named `sql`
+# (a fake template tag that string-builds) would smuggle raw SQL past the
+# gate. This rule bans declaring `sql` as a function/arrow anywhere; binding a
+# client handle (`const sql = createSqlClient(...)`, `postgres(...)`) and
+# receiving `sql` as a callback parameter both remain legal.
+id: no-sql-tag-impersonation
+language: TypeScript
+severity: error
+message: Declaring a function named `sql` impersonates the sanctioned postgres.js template tag.
+note: |
+  Only the postgres.js client handle may be named `sql`. A local function or
+  arrow named `sql` would inherit the SQL-template gate's tagged-template
+  exemption without binding parameters — a string-builder wearing the tag's
+  name. Rename the function, or query through @bonfire/core's withTenant().
+metadata:
+  slop-pattern: gate-exemption-by-identifier-shadowing
+  gate-stage: 1
+  ratchet: BP-011
+rule:
+  any:
+    - pattern: function sql($$$PARAMS) { $$$BODY }
+    - pattern: async function sql($$$PARAMS) { $$$BODY }
+    - pattern: const sql = ($$$PARAMS) => $BODY
+    - pattern: const sql = ($$$PARAMS) => { $$$BODY }
+    - pattern: let sql = ($$$PARAMS) => $BODY
+    - pattern: var sql = ($$$PARAMS) => $BODY
+    - pattern: const sql = function ($$$PARAMS) { $$$BODY }
+    - pattern: const sql = async ($$$PARAMS) => $BODY
+    - pattern: let sql = async ($$$PARAMS) => $BODY
+    - pattern: var sql = async ($$$PARAMS) => $BODY
+---
+id: no-sql-tag-impersonation-tsx
+language: Tsx
+severity: error
+message: Declaring a function named `sql` impersonates the sanctioned postgres.js template tag.
+note: |
+  Only the postgres.js client handle may be named `sql`. A local function or
+  arrow named `sql` would inherit the SQL-template gate's tagged-template
+  exemption without binding parameters — a string-builder wearing the tag's
+  name. Rename the function, or query through @bonfire/core's withTenant().
+metadata:
+  slop-pattern: gate-exemption-by-identifier-shadowing
+  gate-stage: 1
+  ratchet: BP-011
+rule:
+  any:
+    - pattern: function sql($$$PARAMS) { $$$BODY }
+    - pattern: async function sql($$$PARAMS) { $$$BODY }
+    - pattern: const sql = ($$$PARAMS) => $BODY
+    - pattern: const sql = ($$$PARAMS) => { $$$BODY }
+    - pattern: let sql = ($$$PARAMS) => $BODY
+    - pattern: var sql = ($$$PARAMS) => $BODY
+    - pattern: const sql = function ($$$PARAMS) { $$$BODY }
+    - pattern: const sql = async ($$$PARAMS) => $BODY
+    - pattern: let sql = async ($$$PARAMS) => $BODY
+    - pattern: var sql = async ($$$PARAMS) => $BODY

@@ -16,6 +16,14 @@
     "apps/api": {
       "entry": ["src/server.ts", "src/**/*.test.ts"],
       "project": ["src/**/*.ts"]
+    },
+    "seed": {
+      "entry": ["index.ts"],
+      "project": ["**/*.ts"]
+    },
+    ".": {
+      "entry": ["scripts/synthetic-scan/index.ts"],
+      "project": ["scripts/synthetic-scan/**/*.ts"]
     }
   }
 }

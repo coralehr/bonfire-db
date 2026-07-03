@@ -5,7 +5,7 @@
 > `loop ratchet` (and the test suite): if the guard artifact disappears,
 > the check fails and the bug is considered reopened.
 
-7 guarded · 7 open (debt owed a guard)
+15 guarded · 10 open (debt owed a guard)
 
 ## BP-001 — gate-crash-read-as-pass — GUARDED
 
@@ -87,12 +87,12 @@
 - Guard: `test` → `loop/src/gates/docker-invariants.test.ts::api image bun install uses the hoisted linker`
 - Recorded: 2026-07-03
 
-## BP-011 — gate-false-positive-pushes-unsafe-workaround — OPEN
+## BP-011 — gate-false-positive-pushes-unsafe-workaround — GUARDED
 
 - Symptom: The template clause of semgrep rule bonfire-mcp-tool-raw-sql-concat flagged postgres.js sql tagged-template queries — the safe, bound-parameter idiom — so BF-01 shipped a sql.unsafe(constantLiteral, [params]) workaround to pass the gate: the gate steered code toward a less-reviewable API.
 - Root cause: A text regex cannot distinguish a tagged template (interpolations bound as parameters by the sql tag) from an untagged template literal that splices values into statement text.
-- Fix: Operator-reviewed refinement: templates tagged exactly sql are exempted via pattern-not-regex; untagged SQL-shaped templates, string concat, near-miss tags (mysql/rawsql), and unsafe() with interpolation all remain banned; inline suppressions stay banned by the suppressions gate.
-- Planned guard: semgrep behaviour-test corpus (semgrep --test fixtures proving sql tagged templates pass and untagged interpolation fails) wired into the semgrep gate — queue with the BF-02 wave, alongside restoring tenant.ts's tagged template
+- Fix: Operator-reviewed refinement (exemption keyed to templates tagged exactly sql, statement-anchored keywords) + tenant.ts restored to the tagged-template idiom + a semgrep --test behaviour corpus (sgrule-tests/semgrep, run by the semgrep gate and CI) proving each rule fires on its KNOWN bad shapes and stays silent on the sanctioned idioms. Residual denylist-evasion shapes (typed/member/aliased fake tags, off-call-site string building) are tracked as [[BP-020]] — the load-bearing control against them is banning the .unsafe sink, not the name-keyed exemption.
+- Guard: `test` → `sgrule-tests/semgrep/semgrep.ts::ruleid: bonfire-mcp-tool-raw-sql-concat`
 - Recorded: 2026-07-03
 
 ## BP-012 — raw-db-client-bypasses-tenant-boundary — GUARDED
@@ -111,10 +111,98 @@
 - Guard: `test` → `loop/src/gates/docker-invariants.test.ts::published host ports bind loopback only`
 - Recorded: 2026-07-03
 
-## BP-014 — rls-guc-cast-error-channel — OPEN
+## BP-014 — rls-guc-cast-error-channel — GUARDED
 
 - Symptom: A garbage (non-UUID, non-empty) app.current_practice_id makes every query on an RLS-scoped table raise 22P02 invalid input syntax instead of returning zero rows — tenant scoping degrades into an error channel that callers can catch, retry without context, or surface as 500s.
 - Root cause: The policy predicate casts the GUC with a bare ::uuid, which throws on malformed input; NULLIF folds only the empty string, not arbitrary garbage.
-- Fix: Harden the policy template with a safe_uuid() helper (garbage folds to NULL; a NULL predicate is zero rows) via a forward-only migration in the BF-02 prep commit, BEFORE BF-02 stamps the policy onto fhir_resources/history/write_inputs.
-- Planned guard: BF-02 prep-commit migration adding safe_uuid() + policy rewrite, proven by a packages/core/src/db/rls.test.ts case asserting a garbage GUC yields zero rows, not an error (flip to guarded in the BF-02 PR wave)
+- Fix: Migration 0001_rls_safe_uuid: safe_uuid() (STABLE, pg_input_is_valid; garbage folds to NULL, NULL predicate = zero rows) and the rls_scaffold policy rewritten onto the InitPlan-wrapped (SELECT safe_uuid(...)) template — the template BF-02 stamps onto fhir_resources/history/write_inputs.
+- Guard: `test` → `packages/core/src/db/rls.test.ts::a garbage practice context yields zero rows`
+- Recorded: 2026-07-03
+
+## BP-015 — jsonb-param-double-encode — GUARDED
+
+- Symptom: fhir_resources/history content rows held jsonb STRING SCALARS (serialized JSON inside a JSON string) instead of documents; reads that navigated the document returned undefined and re-canonicalized hashes diverged from the stored content_hash.
+- Root cause: `${JSON.stringify(doc)}::jsonb` through postgres.js binds the string with the jsonb parameter type, so the cast is a no-op on an already-jsonb string value — the document is double-encoded (live probe: jsonb_typeof = 'string'; sql.json(doc) yields 'object').
+- Fix: All six content-write sites use sql.json(doc); the idiom is purged from tests; the fhir-rls schema-catalog test asserts jsonb_typeof(content) = 'object' over every stored row (inversion-proof); the maker's own read-back parity test is what caught the corruption pre-merge.
+- Guard: `semgrep` → `bonfire-jsonb-stringify-double-encode`
+- Recorded: 2026-07-03
+
+## BP-016 — cache-restore-clobbers-workspace-symlink — GUARDED
+
+- Symptom: apps/api's @bonfire/core resolved to an empty husk (a real directory holding one stray .tsbuildinfo) after turbo cache activity: typed lint failed with 'type could not be resolved' across the api while root-invoked runs stayed green.
+- Root cause: turbo task output globs `**/*.tsbuildinfo` walked THROUGH the node_modules workspace symlink during output capture; a later cache restore materialized the captured path as a real directory OVER the symlink, shadowing the package.
+- Fix: Output globs scoped to the workspace's own build dirs (dist/**, build/**); the noEmit typecheck task declares no outputs and dependsOn ^build so referenced dist is always fresh; poisoned cache purged; the turbo-outputs test rejects any output glob starting at ** or touching node_modules.
+- Guard: `test` → `loop/src/gates/turbo-outputs.test.ts::output globs never start at ** or traverse node_modules`
+- Recorded: 2026-07-03
+
+## BP-017 — error-message-echoes-scanned-content — OPEN
+
+- Symptom: JSON.parse failures in the PHI scanner and seed propagated the runtime's error message verbatim to logs; those messages embed a snippet of the source text, so scanning a malformed PHI-bearing file could print a fragment of a real identifier.
+- Root cause: Operational-error paths trusted exception messages, but parser exceptions quote their input — the one tool pointed at suspect files could leak what it exists to catch.
+- Fix: All JSON.parse sites in scripts/synthetic-scan and seed catch and rethrow location-only messages ('invalid JSON in <file> (content not shown)'); the catch-all handlers now only ever see redacted messages on parse paths.
+- Planned guard: scanner test harness (H5 eval wave): feed a malformed PHI-bearing fixture and assert the operational-error output contains no scanned-file content
+- Recorded: 2026-07-03
+
+## BP-018 — append-only-by-forgotten-revoke — OPEN
+
+- Symptom: Append-only tables are one forgotten REVOKE away from mutable: the initdb default privileges pre-grant UPDATE/DELETE on every FUTURE table, so a migration that omits the explicit REVOKE silently ships a mutable 'append-only' table.
+- Root cause: docker/initdb/010-roles.sh ALTER DEFAULT PRIVILEGES grants S/I/U/D wholesale, making immutability opt-out per migration instead of opt-in.
+- Fix: BF-02's migration carries explicit REVOKEs (proven by has_table_privilege tests); the structural fix — flip the default grant to SELECT,INSERT and grant U/D explicitly on mutable tables, plus a catalog posture test over declared append-only tables — needs a docker/** harness wave.
+- Planned guard: harness wave: initdb default-privilege flip to S/I-only + a catalog posture test enumerating append-only tables (queue before BF-05's audit table lands)
+- Recorded: 2026-07-03
+
+## BP-019 — unique-constraint-existence-oracle — OPEN
+
+- Symptom: PK/UNIQUE/FK enforcement bypasses RLS by design: a caller supplying its own resource id gets a distinguishable failure when that id exists in ANOTHER practice — a cross-tenant id-existence probe and an id-squatting DoS (ids only, never content; random UUIDs make blind probing infeasible).
+- Root cause: fhir_resources uses a global PRIMARY KEY (id) + UNIQUE (type,id); uniqueness errors are constraint-level, beneath the RLS policy filter.
+- Fix: Deferred by decision: tenant-scoped composite keys (PK (practice_id,id)) or normalized 23505 handling on insert — decide with BF-04's projection identity design; danger is LOW while ids are server-generated UUIDs.
+- Planned guard: eval (H5): unique-constraint existence-oracle case — a practice-B insert with practice-A's id must be indistinguishable from any other failed insert
+- Recorded: 2026-07-03
+
+## BP-020 — sql-gate-denylist-evasion — GUARDED
+
+- Symptom: An adversarial refutation swarm bypassed the SQL-template semgrep rules and the no-sql-tag-impersonation ast-grep rule: build statement text in a local via concat/Array.join/String.concat then pass the VARIABLE to sql.unsafe() (evades both call-site-local regexes and reaches simple-protocol stacked statements that can re-bind the tenant GUC -> cross-tenant); or declare a fake `sql` tag with a type annotation / member position / import alias (typed-lint forces the very annotations the denylist patterns miss).
+- Root cause: The sql-template rules are call-site/shape local and the sql-tag exemption is keyed on the identifier NAME, so a determined maker writing idiomatic typed TS can route raw SQL to an execution sink the regexes cannot see.
+- Fix: Load-bearing control added: ast-grep no-raw-sql-unsafe bans a non-string-literal argument to .unsafe() — the ONLY execution sink a built string or fake tag could reach (a fake tag's output otherwise becomes a bound param in the real sql tag, and no-raw-postgres-client blocks new clients). BP-015 broadened to catch extracted-variable and CAST(...AS jsonb) forms. no-sql-tag-impersonation extended to async/let/var shapes as defense-in-depth. Residual: the impersonation denylist is still incomplete for typed/member/aliased declarations (within-tenant only once the .unsafe sink is closed).
+- Guard: `ast-grep` → `sgrules/no-raw-sql-unsafe.yml`
+- Recorded: 2026-07-03
+
+## BP-021 — phi-tripwire-silent-narrowing — GUARDED
+
+- Symptom: The synthetic-only scanner self-tests detector classes on a HARDCODED planted fixture, decoupled from the sweep set — so emptying SCAN_ROOTS, dropping a class from ALL_RULES, or deleting the scanner (behind a fail-open CI `if [ -f ]` guard) leaves the run green while sweeping nothing (proven: SCAN_ROOTS=[] exits 0).
+- Root cause: Self-test coverage != scan coverage, and the scanner's config (scripts/**) sits outside GLOBAL_FORBIDDEN_PATHS, so a future maker could narrow scope and pass allowed-paths too; CI's only tripwire enforcement was one fail-open-guarded step.
+- Fix: synthetic-scan-wiring pin test (runs in CI build-test via turbo test) asserts SCAN_ROOTS non-empty + covers fixtures/synthetic, ALL_RULES has all 6 canonical classes, the scan:synthetic script + loop gate + CI step exist; the CI scan and semgrep --test steps made unconditional (deletion is now a red check). Residual (open [[BP-022]]): scan EXTENSION/ROOT scope is narrow (.ndjson/.json under fixtures/synthetic only) and baseline.json is same-commit-forgeable-with-review; scripts/synthetic-scan/** not yet on the allowed-paths floor.
+- Guard: `test` → `loop/src/gates/synthetic-scan-wiring.test.ts::SCAN_ROOTS still covers the synthetic fixture corpus`
+- Recorded: 2026-07-03
+
+## BP-022 — phi-tripwire-scope-narrow — OPEN
+
+- Symptom: PHI-shaped data can land undetected outside the scanner's narrow scope: a non-.ndjson/.json file inside fixtures/synthetic (e.g. .csv), or any file under seed/ inline literals, tests/, docs/, or a new fixtures/ subdir, is swept by NO gate (gitleaks=secrets, semgrep=SQL/authz — neither detects PHI names/MRNs/DOBs). baseline.json entries are forgeable in the same commit (visible-but-reviewed suppression).
+- Root cause: SCAN_ROOTS + SCAN_EXTENSIONS are minimal for BF-02's corpus; the tripwire guarantees less than 'no PHI can land'.
+- Fix: (deferred) broaden SCAN_ROOTS/EXTENSIONS as later slices add fixture surfaces (BF-03 fixtures/golden, BF-11 benchmark corpus); add scripts/synthetic-scan/** to GLOBAL_FORBIDDEN_PATHS; make baseline additions require a separate reviewer signal.
+- Planned guard: per-slice SCAN_ROOTS expansion + allowed-paths floor for the scanner internals + baseline provenance check (queue across BF-03/BF-11)
+- Recorded: 2026-07-03
+
+## BP-023 — new-workspace-missing-from-dockerfile — GUARDED
+
+- Symptom: Adding `seed` to the root package.json workspaces broke the api Docker build: `bun install --frozen-lockfile --production` failed with 'Workspace not found seed' because docker/api.Dockerfile COPYs workspace manifests by explicit list. Invisible locally (docker compose reused a cached image); red only on a fresh CI build.
+- Root cause: The Dockerfile enumerates each workspace manifest to COPY, so a newly-declared workspace whose manifest is not added is absent when bun resolves the workspace graph — and local compose runs don't rebuild the image, hiding it.
+- Fix: COPY seed/package.json in both the deps and runtime stages (mirroring loop/); full `docker build` reproduced the failure and confirmed the fix. The docker-invariants test now asserts every non-glob root workspace has a matching COPY in the Dockerfile.
+- Guard: `test` → `loop/src/gates/docker-invariants.test.ts::every non-glob root workspace manifest is COPYed for install`
+- Recorded: 2026-07-03
+
+## BP-024 — db-test-depends-on-unrun-boot-step — OPEN
+
+- Symptom: seeded-state.test.ts asserts seed row counts but does not seed; it passed locally (operator ran `bun run seed` first per the verify[] order) and failed in CI, whose generic `turbo run test` boot only migrated. Green locally, red on a fresh CI runner.
+- Root cause: A DB-backed test carried an implicit precondition (the seed having run) that it did not establish itself, so correctness depended on the runner's boot order rather than the test.
+- Fix: CI boot step now mirrors the slice verify[] order (migrate then seed) so the DB-backed tests run against the same synthetic state the contract establishes. The durable fix — make DB-backed tests self-seed (hermetic) so no bare `bun test` depends on boot order — is owed.
+- Planned guard: hermetic DB tests: a shared test-setup that seeds idempotently in beforeAll (or moves the seed-contract test into the seed workspace where it can import + run the seeder), so ordering is never implicit — build with BF-03's write-path tests
+- Recorded: 2026-07-03
+
+## BP-025 — synthetic-fixtures-gitignored — GUARDED
+
+- Symptom: The 8 synthetic fixture ndjson files were never committed: a blanket `*.ndjson` .gitignore rule (a PHI-safety default) swallowed them. They existed in the worktree so the seed passed locally, but a fresh CI checkout lacked them and the seed crashed with ENOENT on patient.ndjson.
+- Root cause: A broad ignore rule for a PHI-risky file extension caught the synthetic corpus too, and nothing asserted the manifest-listed fixtures were git-tracked.
+- Fix: Scoped un-ignore `!fixtures/synthetic/**/*.ndjson` (parallel to the existing `!drizzle/**/*.sql`), fixtures committed; scan:synthetic still sweeps the dir every run so only synthetic data lives there. The fixtures-tracked test asserts every manifest file is git-tracked and fails fast (no DB) if one is untracked or ignored.
+- Guard: `test` → `loop/src/gates/fixtures-tracked.test.ts::every manifest-listed fixture file is git-tracked`
 - Recorded: 2026-07-03

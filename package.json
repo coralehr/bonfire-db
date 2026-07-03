@@ -9,7 +9,8 @@
   "workspaces": [
     "loop",
     "packages/*",
-    "apps/*"
+    "apps/*",
+    "seed"
   ],
   "scripts": {
     "build": "turbo run build",
@@ -19,6 +20,8 @@
     "test": "turbo run test",
     "gate": "turbo run gate",
     "db:migrate": "bun run packages/core/src/db/migrate.ts",
+    "seed": "bun run seed/index.ts",
+    "scan:synthetic": "bun run scripts/synthetic-scan/index.ts",
     "gen:agents": "bun run loop/src/agents/write.ts",
     "loop": "bun run loop/src/cli/bin.ts"
   },

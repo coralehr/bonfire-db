@@ -74,6 +74,14 @@ describe("rls_scaffold fail-closed default-deny", () => {
     expect(rows.length).toBe(0);
   });
 
+  test("a garbage practice context yields zero rows, never an error (BP-014)", async () => {
+    const rows = await sql.begin(async (tx) => {
+      await tx`select set_config('app.current_practice_id', 'definitely-not-a-uuid', true)`;
+      return tx`select id from rls_scaffold`;
+    });
+    expect(rows.length).toBe(0);
+  });
+
   test("withTenant rejects a non-UUID practice id with a typed error (Zod boundary)", async () => {
     const result = await db.withTenant("", async () => true);
     expect(result.ok).toBe(false);

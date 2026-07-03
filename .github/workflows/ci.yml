@@ -110,11 +110,16 @@ jobs:
       # green. If compose exists, boot MUST succeed — no fail-open skip.
       - name: Boot product stack (DB-backed tests)
         if: matrix.task == 'test'
+        # Mirrors the slice verify[] boot order: migrate then seed, so
+        # DB-backed tests (e.g. the seeded-state contract) run against the
+        # same synthetic state the contract establishes. The seed is
+        # idempotent and only runs once the seeder exists.
         run: |
           set -euo pipefail
           if [ -f docker-compose.yml ]; then
             docker compose up -d --wait
             bun run db:migrate
+            if [ -f seed/index.ts ]; then bun run seed; fi
           else
             echo "no docker-compose.yml yet; nothing to boot"
           fi
@@ -130,6 +135,16 @@ jobs:
           else
             bunx turbo run "${TASK}"
           fi
+      # Synthetic-only tripwire as a PERMANENT blocking step (inside this
+      # required check, so no branch-protection change): the scanner self-tests
+      # every detector class (exit 2 if any fails to fire), then sweeps the
+      # committed fixture corpus. A commit adding real-PHI-shaped data to
+      # fixtures fails CI here, not just in a slice's one-shot verify chain.
+      - name: Synthetic-only scan (PHI tripwire)
+        if: matrix.task == 'test'
+        # Unconditional: deleting the scanner must be a RED check, never an
+        # echo-and-pass (the synthetic-scan-wiring pin test also guards this).
+        run: bun run scan:synthetic
       - name: Tear down product stack
         if: always() && matrix.task == 'test'
         run: |
@@ -162,6 +177,13 @@ jobs:
             --exclude build \
             --exclude .turbo \
             --exclude coverage
+      # Rule behaviour corpus (ratchet BP-011): annotated fixtures prove each
+      # rule fires on known-bad code and stays silent on the sanctioned idioms,
+      # so a rule edit that weakens either side fails this required check.
+      # Unconditional: deleting the corpus must be a RED check, not a skip.
+      - name: Semgrep rule behaviour tests
+        shell: sh
+        run: semgrep scan --test sgrule-tests/semgrep
 
   # ---------------------------------------------------------------------------
   # BLOCKING — secret scanning (gitleaks CLI, pinned + checksum-verified, explicit

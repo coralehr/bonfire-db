@@ -1,0 +1,18 @@
+{
+  "resourceType": "Patient",
+  "id": "planted-tripwire-patient",
+  "name": [{ "family": "Thompson", "given": ["Margaret"] }],
+  "birthDate": "1954-07-22",
+  "telecom": [{ "system": "phone", "value": "999-555-2368", "use": "home" }],
+  "identifier": [
+    { "system": "http://hl7.org/fhir/sid/us-ssn", "value": "078-05-1120" },
+    { "system": "http://hl7.org/fhir/sid/us-npi", "value": "1234567893" },
+    {
+      "type": {
+        "coding": [{ "system": "http://terminology.hl7.org/CodeSystem/v2-0203", "code": "MR" }]
+      },
+      "system": "https://memorial-hospital.example/records/mrn",
+      "value": "MRN-4415926"
+    }
+  ]
+}

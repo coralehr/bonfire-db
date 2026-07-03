@@ -24,8 +24,8 @@
     "gate": "echo gated"
   },
   "dependencies": {
-    "drizzle-orm": "^0.44.6",
-    "postgres": "^3.4.7",
+    "drizzle-orm": "0.45.2",
+    "postgres": "3.4.9",
     "zod": "4.4.3"
   }
 }

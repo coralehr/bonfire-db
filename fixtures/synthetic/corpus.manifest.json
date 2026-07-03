@@ -1,0 +1,54 @@
+{
+  "source": "Hand-authored synthetic corpus in the style of Synthea bulk-FHIR ndjson output: digit-suffixed names, invalid-by-construction SSNs (area 000/666/9xx or group 00), 7-digit 555-01xx phones, Luhn-invalid NPIs, MRNs under the allowlisted synthetic system. No real patient data. Drop-in replacement path: a pinned smart-on-fhir/sample-bulk-fhir-datasets release asset with its SHA-256 recorded here.",
+  "practices": ["11111111-1111-4111-8111-111111111111", "22222222-2222-4222-8222-222222222222"],
+  "files": [
+    {
+      "path": "patient.ndjson",
+      "resourceType": "Patient",
+      "count": 3,
+      "sha256": "eb9a04590ff6d35aa6575d548b36ca5e04fd9263c7e3105e0531bbe47d505d49"
+    },
+    {
+      "path": "practitioner.ndjson",
+      "resourceType": "Practitioner",
+      "count": 3,
+      "sha256": "3143c9e418ce5bffc50e196682f257279f537548efa0837cb932ae710c3239b8"
+    },
+    {
+      "path": "encounter.ndjson",
+      "resourceType": "Encounter",
+      "count": 3,
+      "sha256": "1751e2c2d5c4f301fc6d167441d4fa357a194aba6962b7540b6296eb409d8dc3"
+    },
+    {
+      "path": "condition.ndjson",
+      "resourceType": "Condition",
+      "count": 3,
+      "sha256": "f2442b3c769d6b866b0fdb0afeb79c887a497da716d026d91b014b608a458e45"
+    },
+    {
+      "path": "observation.ndjson",
+      "resourceType": "Observation",
+      "count": 3,
+      "sha256": "a89edb6af09c4173254bc81e47e1169daf41f518d248116d580fb73bd2da0572"
+    },
+    {
+      "path": "medication-request.ndjson",
+      "resourceType": "MedicationRequest",
+      "count": 3,
+      "sha256": "959bc3a3b67ae9692e5d766a478fbb6fd09a8d61b723a64ac491eaf4a1ad0ee7"
+    },
+    {
+      "path": "allergy-intolerance.ndjson",
+      "resourceType": "AllergyIntolerance",
+      "count": 3,
+      "sha256": "32b4fe2a361a74a4b8e3b5f8c91e50857a4f708e134117e8e32076f79ca61eb3"
+    },
+    {
+      "path": "document-reference.ndjson",
+      "resourceType": "DocumentReference",
+      "count": 3,
+      "sha256": "9b1a1d96e994f84a4e9392e2d2710755cc3ece75bb6a74a69c02c0808355cb2c"
+    }
+  ]
+}

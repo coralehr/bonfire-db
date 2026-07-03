@@ -74,15 +74,19 @@ describe("the real KB", () => {
     const r = readBugPatterns(findRepoRoot(import.meta.url));
     expect(r.ok).toBe(true);
     if (r.ok) {
-      // 8 seeded classes (BP-001..008) + 6 from the BF-01 run (BP-009..014).
+      // 8 seeded classes (BP-001..008) + 6 from the BF-01 run (BP-009..014)
+      // + 11 confirmed during the BF-02 run, its audit, the refutation swarm, and CI (BP-015..025).
       // Deliberately pinned: growing the KB means growing this expectation.
-      expect(r.value).toHaveLength(14);
+      expect(r.value).toHaveLength(25);
       const classes = r.value.map((e) => e.class);
       expect(classes).toContain("gate-crash-read-as-pass");
       expect(classes).toContain("cross-tenant-leak");
       expect(classes).toContain("fail-open-authz");
       expect(classes).toContain("raw-db-client-bypasses-tenant-boundary");
       expect(classes).toContain("rls-guc-cast-error-channel");
+      expect(classes).toContain("jsonb-param-double-encode");
+      expect(classes).toContain("unique-constraint-existence-oracle");
+      expect(classes).toContain("sql-gate-denylist-evasion");
     }
   });
 });

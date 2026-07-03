@@ -43,6 +43,9 @@ export default defineConfig(
     "**/.vite/**",
     "**/*.tsbuildinfo",
     "drizzle/**",
+    // Semgrep behaviour corpus: deliberately-bad annotated fixtures, enforced
+    // by `semgrep scan --test`, outside every tsconfig project on purpose.
+    "sgrule-tests/semgrep/**",
     "**/.gstack/**",
     ".dependency-cruiser.cjs"
   ]),

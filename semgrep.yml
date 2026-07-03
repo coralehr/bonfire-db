@@ -53,6 +53,9 @@ rules:
           - pattern: $SINK.raw($A + ...)
     paths:
       exclude:
+        # The behaviour corpus contains deliberately-bad code, annotated and
+        # enforced by `semgrep scan --test sgrule-tests/semgrep` instead.
+        - "sgrule-tests/semgrep/**"
         - "**/*.test.ts"
         - "**/*.test.tsx"
         - "**/*.test.mjs"
@@ -181,16 +184,17 @@ rules:
               - metavariable-regex:
                   metavariable: $R
                   regex: '(?i)["''`]\s*(select\s|insert\s+into\s|update\s|delete\s+from\s|drop\s+table\s|alter\s+table\s|truncate\s|create\s+table\s|merge\s+into\s|union\s+select\s)'
-          # Untagged template literal that both LOOKS like SQL and interpolates.
-          # The not-regex carves out the ONE sanctioned tag — a template opened
-          # by a standalone `sql` identifier (postgres.js / Drizzle tagged
-          # template, interpolations become bound parameters). `mysql`/`rawsql`
-          # style near-miss tags are NOT exempt ((?<![\w$]) requires the tag to
-          # be exactly `sql`), and sql.unsafe with interpolation is still caught
-          # by bonfire-sql-injection-string-build above.
-          - patterns:
-              - pattern-regex: '(?i)`[^`]*\b(select|insert\s+into|update|delete|drop\s+table|alter\s+table|truncate|create\s+table|merge|union\s+select|where|from|join)\b[^`]*\$\{[^`]*`'
-              - pattern-not-regex: '(?<![\w$])sql`[^`]*`'
+          # Untagged template literal that both LOOKS like a SQL statement and
+          # interpolates. The lookbehind branches exempt the ONE sanctioned tag
+          # — a template opened by a standalone `sql` identifier (postgres.js /
+          # Drizzle: interpolations become bound parameters): a backtick either
+          # NOT preceded by `sql`, or preceded by a `mysql`/`rawsql`-style
+          # near-miss ([\w$]sql), is still flagged. Keywords are anchored to
+          # statement shapes (select ... / insert into ... / delete from ...)
+          # so prose like "row shape from ${x}" in error messages cannot match;
+          # sql.unsafe with interpolation is still caught by
+          # bonfire-sql-injection-string-build above. (Ratchet BP-011.)
+          - pattern-regex: '(?i)(?:(?<!sql)|(?<=[\w$]sql))`[^`]*\b(select|insert\s+into|update\s+\S+\s+set|delete\s+from|drop\s+table|alter\s+table|truncate\s+table|create\s+table|merge\s+into|union\s+select)\s[^`]*\$\{[^`]*`'
     paths:
       include:
         - "packages/core/**"
@@ -212,6 +216,47 @@ rules:
         - "**/*.test.mjs"
         - "**/*.test.js"
         - "**/*.spec.ts"
+
+  # --------------------------------------------------------------------------
+  # RATCHET BP-015 — a value interpolated into a jsonb cast double-encodes.
+  # postgres.js binds an interpolated string with the jsonb parameter type, so
+  # `${anything}::jsonb` (or the CAST(... AS jsonb) spelling) over a serialized
+  # value stores a jsonb STRING SCALAR, not a document (live probe: jsonb_typeof
+  # = 'string'). The refutation panel showed the original inline-JSON.stringify
+  # regex was evaded by extracting the stringify to a local (`${s}::jsonb`) or
+  # by the CAST spelling, so this now flags EVERY interpolated jsonb cast and
+  # carves out only the sanctioned `sql.json(...)` form.
+  # --------------------------------------------------------------------------
+  - id: bonfire-jsonb-stringify-double-encode
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >-
+      A value interpolated into a jsonb cast (`${...}::jsonb` or
+      `CAST(${...} AS jsonb)`) double-encodes: postgres.js binds it as text and
+      the cast wraps it as a jsonb string scalar, not a document. Use
+      sql.json(value) — it binds the value as a real jsonb object. (Ratchet
+      BP-015; the jsonb_typeof guard test asserts the stored shape.)
+    metadata:
+      category: correctness
+      subcategory: [vuln]
+      confidence: HIGH
+      likelihood: HIGH
+      impact: HIGH
+      ratchet: BP-015
+      references:
+        - https://github.com/porsager/postgres#json
+    patterns:
+      # Any interpolation immediately cast to jsonb, in either spelling. The
+      # not-regex exempts the sanctioned sql.json(...) form so `${sql.json(x)}`
+      # (which is never cast) and a rare `${sql.json(x)}::jsonb` both pass.
+      - pattern-either:
+          - pattern-regex: '\$\{[^}`]*\}\s*::\s*jsonb'
+          - pattern-regex: '(?i)\bcast\s*\(\s*\$\{[^}`]*\}\s+as\s+jsonb\s*\)'
+      - pattern-not-regex: '\$\{[^}`]*\bsql\.json\b'
+    paths:
+      exclude:
+        # Deliberately-bad corpus lines live under the --test harness instead.
+        - "sgrule-tests/semgrep/**"
 
   # --------------------------------------------------------------------------
   # HEALTHCARE CUSTOM RULE 2 — Authorization must be DENY-BY-DEFAULT. Flags the
