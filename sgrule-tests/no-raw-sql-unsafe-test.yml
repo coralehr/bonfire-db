@@ -1,0 +1,24 @@
+# Behaviour tests for no-raw-sql-unsafe. Run: bunx ast-grep test --skip-snapshot-tests
+id: no-raw-sql-unsafe
+valid:
+  - |
+    await sql.unsafe("select 1");
+  - |
+    await sql.unsafe("select set_config('app.current_practice_id', $1, true)", [id]);
+  - |
+    const rows = await sql`select id from fhir_resources where practice_id = ${practiceId}`;
+  - |
+    await sql`insert into t (c) values (${sql.json(content)})`;
+invalid:
+  - |
+    const q = head + field; await sql.unsafe(q);
+  - |
+    await sql.unsafe("select * from t where id = " + userId);
+  - |
+    await sql.unsafe(parts.join(" "));
+  - |
+    await db.unsafe(`select * from t where id = ${userId}`);
+  - |
+    await sql.unsafe(build(userType));
+  - |
+    await sql.unsafe(q, [userId]);

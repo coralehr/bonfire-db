@@ -218,21 +218,24 @@ rules:
         - "**/*.spec.ts"
 
   # --------------------------------------------------------------------------
-  # RATCHET BP-015 — stringified document cast to ::jsonb double-encodes.
-  # postgres.js sends an interpolated JS string with the jsonb parameter type,
-  # so `${JSON.stringify(doc)}::jsonb` stores a jsonb STRING SCALAR containing
-  # serialized JSON, not a document (proven by live probe: jsonb_typeof =
-  # 'string'). The sanctioned form is sql.json(doc), which stores an object.
+  # RATCHET BP-015 — a value interpolated into a jsonb cast double-encodes.
+  # postgres.js binds an interpolated string with the jsonb parameter type, so
+  # `${anything}::jsonb` (or the CAST(... AS jsonb) spelling) over a serialized
+  # value stores a jsonb STRING SCALAR, not a document (live probe: jsonb_typeof
+  # = 'string'). The refutation panel showed the original inline-JSON.stringify
+  # regex was evaded by extracting the stringify to a local (`${s}::jsonb`) or
+  # by the CAST spelling, so this now flags EVERY interpolated jsonb cast and
+  # carves out only the sanctioned `sql.json(...)` form.
   # --------------------------------------------------------------------------
   - id: bonfire-jsonb-stringify-double-encode
     languages: [typescript, javascript]
     severity: ERROR
     message: >-
-      JSON.stringify(...) interpolated into a SQL template and cast to ::jsonb
-      stores a jsonb string scalar (double-encoded document), never a jsonb
-      document. Use sql.json(value) instead — it binds the value as a real
-      jsonb object. (Ratchet BP-015; the jsonb_typeof guard test asserts the
-      stored shape.)
+      A value interpolated into a jsonb cast (`${...}::jsonb` or
+      `CAST(${...} AS jsonb)`) double-encodes: postgres.js binds it as text and
+      the cast wraps it as a jsonb string scalar, not a document. Use
+      sql.json(value) — it binds the value as a real jsonb object. (Ratchet
+      BP-015; the jsonb_typeof guard test asserts the stored shape.)
     metadata:
       category: correctness
       subcategory: [vuln]
@@ -243,7 +246,13 @@ rules:
       references:
         - https://github.com/porsager/postgres#json
     patterns:
-      - pattern-regex: '\$\{\s*JSON\.stringify\([^`]*?\)\s*\}\s*::\s*jsonb'
+      # Any interpolation immediately cast to jsonb, in either spelling. The
+      # not-regex exempts the sanctioned sql.json(...) form so `${sql.json(x)}`
+      # (which is never cast) and a rare `${sql.json(x)}::jsonb` both pass.
+      - pattern-either:
+          - pattern-regex: '\$\{[^}`]*\}\s*::\s*jsonb'
+          - pattern-regex: '(?i)\bcast\s*\(\s*\$\{[^}`]*\}\s+as\s+jsonb\s*\)'
+      - pattern-not-regex: '\$\{[^}`]*\bsql\.json\b'
     paths:
       exclude:
         # Deliberately-bad corpus lines live under the --test harness instead.

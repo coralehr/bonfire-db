@@ -45,6 +45,11 @@ export async function bannedShapes(): Promise<void> {
   await db.unsafe(`select * from t where id = ${practiceId}`);
   // ruleid: bonfire-jsonb-stringify-double-encode
   await sql`insert into t (c) values (${JSON.stringify(content)}::jsonb)`;
+  const serialized = JSON.stringify(content);
+  // ruleid: bonfire-jsonb-stringify-double-encode
+  await sql`insert into t (c) values (${serialized}::jsonb)`;
+  // ruleid: bonfire-jsonb-stringify-double-encode
+  await sql`insert into t (c) values (cast(${JSON.stringify(content)} as jsonb))`;
   void untagged;
   void nearMissTag;
   void concatenated;

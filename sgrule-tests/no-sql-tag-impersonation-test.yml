@@ -15,6 +15,10 @@ invalid:
   - |
     function sql(strings, ...values) { return strings.join("?"); }
   - |
+    async function sql(strings) { return strings.join(""); }
+  - |
+    let sql = async (s) => s.join("");
+  - |
     const sql = (strings, ...values) => strings.raw.join("");
   - |
     const sql = (text) => { return text; };

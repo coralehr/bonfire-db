@@ -75,9 +75,9 @@ describe("the real KB", () => {
     expect(r.ok).toBe(true);
     if (r.ok) {
       // 8 seeded classes (BP-001..008) + 6 from the BF-01 run (BP-009..014)
-      // + 5 confirmed during the BF-02 run and its security audit (BP-015..019).
+      // + 8 confirmed during the BF-02 run, its audit, and the refutation swarm (BP-015..022).
       // Deliberately pinned: growing the KB means growing this expectation.
-      expect(r.value).toHaveLength(19);
+      expect(r.value).toHaveLength(22);
       const classes = r.value.map((e) => e.class);
       expect(classes).toContain("gate-crash-read-as-pass");
       expect(classes).toContain("cross-tenant-leak");
@@ -86,6 +86,7 @@ describe("the real KB", () => {
       expect(classes).toContain("rls-guc-cast-error-channel");
       expect(classes).toContain("jsonb-param-double-encode");
       expect(classes).toContain("unique-constraint-existence-oracle");
+      expect(classes).toContain("sql-gate-denylist-evasion");
     }
   });
 });

@@ -22,12 +22,15 @@ metadata:
 rule:
   any:
     - pattern: function sql($$$PARAMS) { $$$BODY }
+    - pattern: async function sql($$$PARAMS) { $$$BODY }
     - pattern: const sql = ($$$PARAMS) => $BODY
     - pattern: const sql = ($$$PARAMS) => { $$$BODY }
     - pattern: let sql = ($$$PARAMS) => $BODY
     - pattern: var sql = ($$$PARAMS) => $BODY
     - pattern: const sql = function ($$$PARAMS) { $$$BODY }
     - pattern: const sql = async ($$$PARAMS) => $BODY
+    - pattern: let sql = async ($$$PARAMS) => $BODY
+    - pattern: var sql = async ($$$PARAMS) => $BODY
 ---
 id: no-sql-tag-impersonation-tsx
 language: Tsx
@@ -45,9 +48,12 @@ metadata:
 rule:
   any:
     - pattern: function sql($$$PARAMS) { $$$BODY }
+    - pattern: async function sql($$$PARAMS) { $$$BODY }
     - pattern: const sql = ($$$PARAMS) => $BODY
     - pattern: const sql = ($$$PARAMS) => { $$$BODY }
     - pattern: let sql = ($$$PARAMS) => $BODY
     - pattern: var sql = ($$$PARAMS) => $BODY
     - pattern: const sql = function ($$$PARAMS) { $$$BODY }
     - pattern: const sql = async ($$$PARAMS) => $BODY
+    - pattern: let sql = async ($$$PARAMS) => $BODY
+    - pattern: var sql = async ($$$PARAMS) => $BODY

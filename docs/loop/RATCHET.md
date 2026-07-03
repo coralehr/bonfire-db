@@ -5,7 +5,7 @@
 > `loop ratchet` (and the test suite): if the guard artifact disappears,
 > the check fails and the bug is considered reopened.
 
-11 guarded · 8 open (debt owed a guard)
+13 guarded · 9 open (debt owed a guard)
 
 ## BP-001 — gate-crash-read-as-pass — GUARDED
 
@@ -91,7 +91,7 @@
 
 - Symptom: The template clause of semgrep rule bonfire-mcp-tool-raw-sql-concat flagged postgres.js sql tagged-template queries — the safe, bound-parameter idiom — so BF-01 shipped a sql.unsafe(constantLiteral, [params]) workaround to pass the gate: the gate steered code toward a less-reviewable API.
 - Root cause: A text regex cannot distinguish a tagged template (interpolations bound as parameters by the sql tag) from an untagged template literal that splices values into statement text.
-- Fix: Operator-reviewed rule refinement (exemption keyed to templates tagged exactly sql, statement-anchored keywords) + tenant.ts restored to the tagged-template idiom + a semgrep --test behaviour corpus (sgrule-tests/semgrep, run by the semgrep gate and CI) proving every rule fires on known-bad and stays silent on sanctioned idioms + ast-grep no-sql-tag-impersonation banning fake `sql` tag declarations.
+- Fix: Operator-reviewed refinement (exemption keyed to templates tagged exactly sql, statement-anchored keywords) + tenant.ts restored to the tagged-template idiom + a semgrep --test behaviour corpus (sgrule-tests/semgrep, run by the semgrep gate and CI) proving each rule fires on its KNOWN bad shapes and stays silent on the sanctioned idioms. Residual denylist-evasion shapes (typed/member/aliased fake tags, off-call-site string building) are tracked as [[BP-020]] — the load-bearing control against them is banning the .unsafe sink, not the name-keyed exemption.
 - Guard: `test` → `sgrule-tests/semgrep/semgrep.ts::ruleid: bonfire-mcp-tool-raw-sql-concat`
 - Recorded: 2026-07-03
 
@@ -157,4 +157,28 @@
 - Root cause: fhir_resources uses a global PRIMARY KEY (id) + UNIQUE (type,id); uniqueness errors are constraint-level, beneath the RLS policy filter.
 - Fix: Deferred by decision: tenant-scoped composite keys (PK (practice_id,id)) or normalized 23505 handling on insert — decide with BF-04's projection identity design; danger is LOW while ids are server-generated UUIDs.
 - Planned guard: eval (H5): unique-constraint existence-oracle case — a practice-B insert with practice-A's id must be indistinguishable from any other failed insert
+- Recorded: 2026-07-03
+
+## BP-020 — sql-gate-denylist-evasion — GUARDED
+
+- Symptom: An adversarial refutation swarm bypassed the SQL-template semgrep rules and the no-sql-tag-impersonation ast-grep rule: build statement text in a local via concat/Array.join/String.concat then pass the VARIABLE to sql.unsafe() (evades both call-site-local regexes and reaches simple-protocol stacked statements that can re-bind the tenant GUC -> cross-tenant); or declare a fake `sql` tag with a type annotation / member position / import alias (typed-lint forces the very annotations the denylist patterns miss).
+- Root cause: The sql-template rules are call-site/shape local and the sql-tag exemption is keyed on the identifier NAME, so a determined maker writing idiomatic typed TS can route raw SQL to an execution sink the regexes cannot see.
+- Fix: Load-bearing control added: ast-grep no-raw-sql-unsafe bans a non-string-literal argument to .unsafe() — the ONLY execution sink a built string or fake tag could reach (a fake tag's output otherwise becomes a bound param in the real sql tag, and no-raw-postgres-client blocks new clients). BP-015 broadened to catch extracted-variable and CAST(...AS jsonb) forms. no-sql-tag-impersonation extended to async/let/var shapes as defense-in-depth. Residual: the impersonation denylist is still incomplete for typed/member/aliased declarations (within-tenant only once the .unsafe sink is closed).
+- Guard: `ast-grep` → `sgrules/no-raw-sql-unsafe.yml`
+- Recorded: 2026-07-03
+
+## BP-021 — phi-tripwire-silent-narrowing — GUARDED
+
+- Symptom: The synthetic-only scanner self-tests detector classes on a HARDCODED planted fixture, decoupled from the sweep set — so emptying SCAN_ROOTS, dropping a class from ALL_RULES, or deleting the scanner (behind a fail-open CI `if [ -f ]` guard) leaves the run green while sweeping nothing (proven: SCAN_ROOTS=[] exits 0).
+- Root cause: Self-test coverage != scan coverage, and the scanner's config (scripts/**) sits outside GLOBAL_FORBIDDEN_PATHS, so a future maker could narrow scope and pass allowed-paths too; CI's only tripwire enforcement was one fail-open-guarded step.
+- Fix: synthetic-scan-wiring pin test (runs in CI build-test via turbo test) asserts SCAN_ROOTS non-empty + covers fixtures/synthetic, ALL_RULES has all 6 canonical classes, the scan:synthetic script + loop gate + CI step exist; the CI scan and semgrep --test steps made unconditional (deletion is now a red check). Residual (open [[BP-022]]): scan EXTENSION/ROOT scope is narrow (.ndjson/.json under fixtures/synthetic only) and baseline.json is same-commit-forgeable-with-review; scripts/synthetic-scan/** not yet on the allowed-paths floor.
+- Guard: `test` → `loop/src/gates/synthetic-scan-wiring.test.ts::SCAN_ROOTS still covers the synthetic fixture corpus`
+- Recorded: 2026-07-03
+
+## BP-022 — phi-tripwire-scope-narrow — OPEN
+
+- Symptom: PHI-shaped data can land undetected outside the scanner's narrow scope: a non-.ndjson/.json file inside fixtures/synthetic (e.g. .csv), or any file under seed/ inline literals, tests/, docs/, or a new fixtures/ subdir, is swept by NO gate (gitleaks=secrets, semgrep=SQL/authz — neither detects PHI names/MRNs/DOBs). baseline.json entries are forgeable in the same commit (visible-but-reviewed suppression).
+- Root cause: SCAN_ROOTS + SCAN_EXTENSIONS are minimal for BF-02's corpus; the tripwire guarantees less than 'no PHI can land'.
+- Fix: (deferred) broaden SCAN_ROOTS/EXTENSIONS as later slices add fixture surfaces (BF-03 fixtures/golden, BF-11 benchmark corpus); add scripts/synthetic-scan/** to GLOBAL_FORBIDDEN_PATHS; make baseline additions require a separate reviewer signal.
+- Planned guard: per-slice SCAN_ROOTS expansion + allowed-paths floor for the scanner internals + baseline provenance check (queue across BF-03/BF-11)
 - Recorded: 2026-07-03
