@@ -5,7 +5,7 @@
 > `loop ratchet` (and the test suite): if the guard artifact disappears,
 > the check fails and the bug is considered reopened.
 
-15 guarded · 10 open (debt owed a guard)
+16 guarded · 9 open (debt owed a guard)
 
 ## BP-001 — gate-crash-read-as-pass — GUARDED
 
@@ -135,12 +135,12 @@
 - Guard: `test` → `loop/src/gates/turbo-outputs.test.ts::output globs never start at ** or traverse node_modules`
 - Recorded: 2026-07-03
 
-## BP-017 — error-message-echoes-scanned-content — OPEN
+## BP-017 — error-message-echoes-scanned-content — GUARDED
 
-- Symptom: JSON.parse failures in the PHI scanner and seed propagated the runtime's error message verbatim to logs; those messages embed a snippet of the source text, so scanning a malformed PHI-bearing file could print a fragment of a real identifier.
+- Symptom: JSON.parse failures in the PHI scanner and seed propagated the runtime's error message verbatim to logs. On V8/Node those messages embed a snippet of the source text (a real-PHI fragment could leak); on Bun/JSC — the actual runtime — the message is content-free ("JSON Parse error: Expected '}'"), so the leak is latent, not live. Redacting is correct defense-in-depth and makes the error path runtime-independent.
 - Root cause: Operational-error paths trusted exception messages, but parser exceptions quote their input — the one tool pointed at suspect files could leak what it exists to catch.
-- Fix: All JSON.parse sites in scripts/synthetic-scan and seed catch and rethrow location-only messages ('invalid JSON in <file> (content not shown)'); the catch-all handlers now only ever see redacted messages on parse paths.
-- Planned guard: scanner test harness (H5 eval wave): feed a malformed PHI-bearing fixture and assert the operational-error output contains no scanned-file content
+- Fix: All JSON.parse sites in scripts/synthetic-scan and seed catch and rethrow a location-only message ('invalid JSON in <file> (content not shown)'). The execution eval spawns the built scanner on a committed malformed input and asserts the operational-error output carries that sentinel (inversion-proof: reverting the redaction drops it), never echoes the canary marker (cross-runtime leak guard), and exits on the operational-error code.
+- Guard: `eval` → `loop/evals/bf02.jsonl::bf02-scanner-error-redacts-content`
 - Recorded: 2026-07-03
 
 ## BP-018 — append-only-by-forgotten-revoke — OPEN

@@ -6,7 +6,12 @@
   "ignoreDependencies": ["@ast-grep/cli", "jscpd"],
   "workspaces": {
     "loop": {
-      "entry": ["src/index.ts", "src/agents/write.ts", "src/**/*.test.ts"],
+      "entry": [
+        "src/index.ts",
+        "src/agents/write.ts",
+        "src/**/*.test.ts",
+        "src/evals/scanner-redaction.ts"
+      ],
       "project": ["src/**/*.ts"]
     },
     "packages/core": {

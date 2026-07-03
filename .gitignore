@@ -64,3 +64,6 @@ id_rsa*
 .envrc
 *credentials*
 secrets.*
+
+# Serena MCP local project cache
+.serena/

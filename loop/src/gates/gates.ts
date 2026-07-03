@@ -215,11 +215,15 @@ export const STANDARD_GATES: readonly Gate[] = [
     tier: "blocking",
     commands: [["bun", "run", "scan:synthetic"]]
   }),
-  commandGate({ name: "knip", stage: 1, tier: "advisory", commands: [["bunx", "knip"]] }),
+  // knip + jscpd graduated advisory -> blocking at the post-BF-02 checkpoint
+  // (P2b): both ran green through BF-01/BF-02 and the codebase shape has
+  // stabilized enough that dead code / duplication is now a landing failure,
+  // not a hint. A silent downgrade back to advisory fails gates.test.ts.
+  commandGate({ name: "knip", stage: 1, tier: "blocking", commands: [["bunx", "knip"]] }),
   commandGate({
     name: "jscpd",
     stage: 1,
-    tier: "advisory",
+    tier: "blocking",
     commands: [
       [
         "bunx",
