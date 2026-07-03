@@ -70,23 +70,32 @@ describe("parseBugPatterns — strict loader (T4)", () => {
 });
 
 describe("the real KB", () => {
-  test("loads, is strict-valid, and carries the seeded incident classes", () => {
+  // The KB is a monotonic ledger — it only grows. A ratchet must never SHRINK,
+  // so the invariant is a floor (below which a class was silently dropped) plus
+  // an explicit roll-call of load-bearing classes that must always be present.
+  // An exact-count pin was pure friction (every new entry forced a bump) and
+  // caught nothing a shrink-floor + roll-call doesn't. Raise SEEDED_FLOOR only
+  // when you intend to make a past class undeleteable — never to chase a count.
+  const SEEDED_FLOOR = 25;
+  const LOAD_BEARING_CLASSES = [
+    "gate-crash-read-as-pass",
+    "cross-tenant-leak",
+    "fail-open-authz",
+    "raw-db-client-bypasses-tenant-boundary",
+    "rls-guc-cast-error-channel",
+    "jsonb-param-double-encode",
+    "unique-constraint-existence-oracle",
+    "sql-gate-denylist-evasion"
+  ];
+
+  test("loads, is strict-valid, never shrinks, and keeps the load-bearing classes", () => {
     const r = readBugPatterns(findRepoRoot(import.meta.url));
     expect(r.ok).toBe(true);
     if (r.ok) {
-      // 8 seeded classes (BP-001..008) + 6 from the BF-01 run (BP-009..014)
-      // + 11 confirmed during the BF-02 run, its audit, the refutation swarm, and CI (BP-015..025).
-      // Deliberately pinned: growing the KB means growing this expectation.
-      expect(r.value).toHaveLength(25);
-      const classes = r.value.map((e) => e.class);
-      expect(classes).toContain("gate-crash-read-as-pass");
-      expect(classes).toContain("cross-tenant-leak");
-      expect(classes).toContain("fail-open-authz");
-      expect(classes).toContain("raw-db-client-bypasses-tenant-boundary");
-      expect(classes).toContain("rls-guc-cast-error-channel");
-      expect(classes).toContain("jsonb-param-double-encode");
-      expect(classes).toContain("unique-constraint-existence-oracle");
-      expect(classes).toContain("sql-gate-denylist-evasion");
+      expect(r.value.length).toBeGreaterThanOrEqual(SEEDED_FLOOR);
+      const classes = new Set(r.value.map((e) => e.class));
+      const missing = LOAD_BEARING_CLASSES.filter((klass) => !classes.has(klass));
+      expect(missing).toEqual([]);
     }
   });
 });
