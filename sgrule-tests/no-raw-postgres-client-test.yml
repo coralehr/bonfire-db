@@ -1,0 +1,26 @@
+# Behaviour tests for no-raw-postgres-client. Run: bunx ast-grep test --skip-snapshot-tests
+# NOTE: `files:`/`ignores:` path scoping does not apply to inline test cases, so
+# these prove the PATTERNS; the sanctioned path exemptions live in the rule file.
+id: no-raw-postgres-client
+valid:
+  - |
+    import type { Sql, TransactionSql } from "postgres";
+  - |
+    import type postgres from "postgres";
+  - |
+    import { connectTenantDb } from "@bonfire/core";
+  - |
+    import fastify from "fastify";
+invalid:
+  - |
+    import postgres from "postgres";
+  - |
+    import pg from "postgres";
+  - |
+    import postgres, { toPascal } from "postgres";
+  - |
+    import * as pg from "postgres";
+  - |
+    const postgres = require("postgres");
+  - |
+    const { default: postgres } = await import("postgres");

@@ -1,0 +1,72 @@
+# Raw postgres.js client outside the core db module (ratchet BP-012).
+# `withTenant` (packages/core/src/db/tenant.ts) is the ONLY public query path:
+# it binds the tenant GUC transaction-locally, so RLS scoping holds on every
+# statement. A value import of "postgres" anywhere else lets code construct a
+# client whose queries run with NO tenant context — default-deny hides the rows
+# today, but a privileged role or pooling misconfiguration would widen it into
+# a cross-tenant read. Type-only imports (`import type { Sql }`) stay legal.
+#
+# Sanctioned exemptions (each reviewed, each still connects as bonfire_app):
+#   - packages/core/src/db/**    the boundary itself (client/tenant/migrate)
+#   - apps/api/src/app.ts        the /health catalog probe's non-tenant pool
+#   - seed/**, scripts/**        operator-run dev surfaces, not the product
+#   - tests                      isolation proofs deliberately step around it
+id: no-raw-postgres-client
+language: TypeScript
+severity: error
+message: Value import of "postgres" outside packages/core/src/db — query through withTenant() instead.
+note: |
+  Construct postgres.js clients only inside packages/core/src/db. Every product
+  query path must go through @bonfire/core's withTenant(), which binds
+  app.current_practice_id transaction-locally so RLS fail-closed scoping holds.
+  Need types? `import type { Sql } from "postgres"` is allowed everywhere.
+metadata:
+  slop-pattern: tenant-boundary-bypass
+  gate-stage: 1
+  ratchet: BP-012
+files:
+  - "packages/**"
+  - "apps/**"
+  - "loop/**"
+ignores:
+  - "packages/core/src/db/**"
+  - "apps/api/src/app.ts"
+  - "**/*.test.ts"
+  - "**/*.test.tsx"
+rule:
+  any:
+    - pattern: import $DEFAULT from "postgres"
+    - pattern: import $DEFAULT, { $$$NAMED } from "postgres"
+    - pattern: import * as $NS from "postgres"
+    - pattern: require("postgres")
+    - pattern: import("postgres")
+---
+id: no-raw-postgres-client-tsx
+language: Tsx
+severity: error
+message: Value import of "postgres" outside packages/core/src/db — query through withTenant() instead.
+note: |
+  Construct postgres.js clients only inside packages/core/src/db. Every product
+  query path must go through @bonfire/core's withTenant(), which binds
+  app.current_practice_id transaction-locally so RLS fail-closed scoping holds.
+  Need types? `import type { Sql } from "postgres"` is allowed everywhere.
+metadata:
+  slop-pattern: tenant-boundary-bypass
+  gate-stage: 1
+  ratchet: BP-012
+files:
+  - "packages/**"
+  - "apps/**"
+  - "loop/**"
+ignores:
+  - "packages/core/src/db/**"
+  - "apps/api/src/app.ts"
+  - "**/*.test.ts"
+  - "**/*.test.tsx"
+rule:
+  any:
+    - pattern: import $DEFAULT from "postgres"
+    - pattern: import $DEFAULT, { $$$NAMED } from "postgres"
+    - pattern: import * as $NS from "postgres"
+    - pattern: require("postgres")
+    - pattern: import("postgres")

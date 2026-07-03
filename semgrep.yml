@@ -153,6 +153,9 @@ rules:
       code. No raw-SQL tool may be exposed on the Bonfire product surface, and all
       data access must be parameterized. Use the Drizzle query builder or the `sql`
       tagged template (bound params) instead of building statement text by hand.
+      Templates tagged exactly `sql` are exempt: postgres.js/Drizzle bind their
+      interpolations as parameters (ratchet BP-011 — the untagged-template clause
+      previously flagged the safe idiom and pushed code toward sql.unsafe).
     metadata:
       category: security
       subcategory: [vuln]
@@ -178,7 +181,16 @@ rules:
               - metavariable-regex:
                   metavariable: $R
                   regex: '(?i)["''`]\s*(select\s|insert\s+into\s|update\s|delete\s+from\s|drop\s+table\s|alter\s+table\s|truncate\s|create\s+table\s|merge\s+into\s|union\s+select\s)'
-          - pattern-regex: '(?i)`[^`]*\b(select|insert\s+into|update|delete|drop\s+table|alter\s+table|truncate|create\s+table|merge|union\s+select|where|from|join)\b[^`]*\$\{[^`]*`'
+          # Untagged template literal that both LOOKS like SQL and interpolates.
+          # The not-regex carves out the ONE sanctioned tag — a template opened
+          # by a standalone `sql` identifier (postgres.js / Drizzle tagged
+          # template, interpolations become bound parameters). `mysql`/`rawsql`
+          # style near-miss tags are NOT exempt ((?<![\w$]) requires the tag to
+          # be exactly `sql`), and sql.unsafe with interpolation is still caught
+          # by bonfire-sql-injection-string-build above.
+          - patterns:
+              - pattern-regex: '(?i)`[^`]*\b(select|insert\s+into|update|delete|drop\s+table|alter\s+table|truncate|create\s+table|merge|union\s+select|where|from|join)\b[^`]*\$\{[^`]*`'
+              - pattern-not-regex: '(?<![\w$])sql`[^`]*`'
     paths:
       include:
         - "packages/core/**"

@@ -70,15 +70,19 @@ describe("parseBugPatterns — strict loader (T4)", () => {
 });
 
 describe("the real KB", () => {
-  test("loads, is strict-valid, and carries the 8 seeded incident classes", () => {
+  test("loads, is strict-valid, and carries the seeded incident classes", () => {
     const r = readBugPatterns(findRepoRoot(import.meta.url));
     expect(r.ok).toBe(true);
     if (r.ok) {
-      expect(r.value).toHaveLength(8);
+      // 8 seeded classes (BP-001..008) + 6 from the BF-01 run (BP-009..014).
+      // Deliberately pinned: growing the KB means growing this expectation.
+      expect(r.value).toHaveLength(14);
       const classes = r.value.map((e) => e.class);
       expect(classes).toContain("gate-crash-read-as-pass");
       expect(classes).toContain("cross-tenant-leak");
       expect(classes).toContain("fail-open-authz");
+      expect(classes).toContain("raw-db-client-bypasses-tenant-boundary");
+      expect(classes).toContain("rls-guc-cast-error-channel");
     }
   });
 });
