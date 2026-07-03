@@ -50,6 +50,14 @@
         "zod": "4.4.3",
       },
     },
+    "seed": {
+      "name": "@bonfire/seed",
+      "version": "0.0.0",
+      "dependencies": {
+        "@bonfire/core": "workspace:*",
+        "zod": "4.4.3",
+      },
+    },
   },
   "packages": {
     "@ast-grep/cli": ["@ast-grep/cli@0.44.0", "", { "dependencies": { "detect-libc": "2.1.2" }, "optionalDependencies": { "@ast-grep/cli-darwin-arm64": "0.44.0", "@ast-grep/cli-darwin-x64": "0.44.0", "@ast-grep/cli-linux-arm64-gnu": "0.44.0", "@ast-grep/cli-linux-x64-gnu": "0.44.0", "@ast-grep/cli-win32-arm64-msvc": "0.44.0", "@ast-grep/cli-win32-ia32-msvc": "0.44.0", "@ast-grep/cli-win32-x64-msvc": "0.44.0" }, "bin": { "sg": "sg", "ast-grep": "ast-grep" } }, "sha512-Jf4PuP7XjzsMa3m9gYxmzV8KyWZc4w1ZzKe/t0+90wWxmSasQJe6AtMkJxHEi98MGgfAF1nWziqjDd0/6EsBjA=="],
@@ -91,6 +99,8 @@
     "@bonfire/core": ["@bonfire/core@workspace:packages/core"],
 
     "@bonfire/loop": ["@bonfire/loop@workspace:loop"],
+
+    "@bonfire/seed": ["@bonfire/seed@workspace:seed"],
 
     "@emnapi/core": ["@emnapi/core@1.11.1", "", { "dependencies": { "@emnapi/wasi-threads": "1.2.2", "tslib": "^2.4.0" } }, "sha512-RSvbQmHzdKzNsLYa/wHrbc3KN4sYLKAdPZxqiM2HATqv/SBk2/ENSHpvXGaLOMcsAyz0poEGqkmmKYG3OWiJEQ=="],
 

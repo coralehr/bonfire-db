@@ -15,6 +15,13 @@
       "when": 1751500800000,
       "tag": "0001_rls_safe_uuid",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1751587200000,
+      "tag": "0002_fhir_store",
+      "breakpoints": true
     }
   ]
 }

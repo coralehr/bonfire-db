@@ -28,7 +28,7 @@ export interface TenantDb {
    */
   withTenant<T>(
     practiceId: string,
-    fn: (tx: TenantSql) => Promise<T>
+    fn: (sql: TenantSql) => Promise<T>
   ): Promise<Result<T, BonfireError<WithTenantErrorCode>>>;
   /** Close the underlying pool (graceful shutdown). */
   end(): Promise<void>;
@@ -37,18 +37,12 @@ export interface TenantDb {
 const practiceIdSchema = z.uuid();
 const END_TIMEOUT_SECONDS = 5;
 
-// Parameterized via postgres.js bound params ($1) — the practice id is never
-// interpolated into statement text. `.unsafe` is used (not a tagged template)
-// because the repo's SQL-template guard rejects any interpolated template; a
-// bound-parameter literal string is the sanctioned parameterized form.
-const SET_TENANT_GUC = "select set_config('app.current_practice_id', $1, true)";
-
 /** Wrap an existing client. Internal seam — tests compose it with a max:1 pool. */
 export function createTenantDb(sql: Sql): TenantDb {
   return {
     async withTenant<T>(
       practiceId: string,
-      fn: (tx: TenantSql) => Promise<T>
+      fn: (sql: TenantSql) => Promise<T>
     ): Promise<Result<T, BonfireError<WithTenantErrorCode>>> {
       const parsed = practiceIdSchema.safeParse(practiceId);
       if (!parsed.success) {
@@ -56,12 +50,14 @@ export function createTenantDb(sql: Sql): TenantDb {
       }
       // Captured via closure (not begin's return value) so the callback's type
       // stays concrete — postgres.js wraps returns in UnwrapPromiseArray, which
-      // never resolves over a free generic.
+      // never resolves over a free generic. The callback handle shadow-names the
+      // outer pool `sql` on purpose: the un-pinned client is unreachable inside
+      // the transaction, so no statement can escape the tenant GUC.
       let captured: { readonly value: T } | undefined;
       try {
-        await sql.begin(async (tx) => {
-          await tx.unsafe(SET_TENANT_GUC, [parsed.data]);
-          captured = { value: await fn(tx) };
+        await sql.begin(async (sql) => {
+          await sql`select set_config('app.current_practice_id', ${parsed.data}, true)`;
+          captured = { value: await fn(sql) };
         });
       } catch (_cause) {
         return err({ code: "TENANT_TX_FAILED", message: "tenant-scoped transaction failed" });
