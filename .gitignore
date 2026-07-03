@@ -54,6 +54,10 @@ id_rsa*
 *.ndjson
 *.xlsx
 !drizzle/**/*.sql
+# The synthetic fixture corpus is committed on purpose (the seed reads it and
+# scan:synthetic sweeps it every run); the blanket *.ndjson ignore above must
+# not swallow it — that hid the files from CI while they existed locally.
+!fixtures/synthetic/**/*.ndjson
 !seed/**/*.sql
 
 # Other credential files

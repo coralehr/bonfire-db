@@ -5,7 +5,7 @@
 > `loop ratchet` (and the test suite): if the guard artifact disappears,
 > the check fails and the bug is considered reopened.
 
-14 guarded · 10 open (debt owed a guard)
+15 guarded · 10 open (debt owed a guard)
 
 ## BP-001 — gate-crash-read-as-pass — GUARDED
 
@@ -197,4 +197,12 @@
 - Root cause: A DB-backed test carried an implicit precondition (the seed having run) that it did not establish itself, so correctness depended on the runner's boot order rather than the test.
 - Fix: CI boot step now mirrors the slice verify[] order (migrate then seed) so the DB-backed tests run against the same synthetic state the contract establishes. The durable fix — make DB-backed tests self-seed (hermetic) so no bare `bun test` depends on boot order — is owed.
 - Planned guard: hermetic DB tests: a shared test-setup that seeds idempotently in beforeAll (or moves the seed-contract test into the seed workspace where it can import + run the seeder), so ordering is never implicit — build with BF-03's write-path tests
+- Recorded: 2026-07-03
+
+## BP-025 — synthetic-fixtures-gitignored — GUARDED
+
+- Symptom: The 8 synthetic fixture ndjson files were never committed: a blanket `*.ndjson` .gitignore rule (a PHI-safety default) swallowed them. They existed in the worktree so the seed passed locally, but a fresh CI checkout lacked them and the seed crashed with ENOENT on patient.ndjson.
+- Root cause: A broad ignore rule for a PHI-risky file extension caught the synthetic corpus too, and nothing asserted the manifest-listed fixtures were git-tracked.
+- Fix: Scoped un-ignore `!fixtures/synthetic/**/*.ndjson` (parallel to the existing `!drizzle/**/*.sql`), fixtures committed; scan:synthetic still sweeps the dir every run so only synthetic data lives there. The fixtures-tracked test asserts every manifest file is git-tracked and fails fast (no DB) if one is untracked or ignored.
+- Guard: `test` → `loop/src/gates/fixtures-tracked.test.ts::every manifest-listed fixture file is git-tracked`
 - Recorded: 2026-07-03
