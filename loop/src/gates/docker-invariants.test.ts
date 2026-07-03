@@ -1,13 +1,17 @@
 /**
- * Ratchet guards over the Docker surface (BP-009, BP-010, BP-013).
+ * Ratchet guards over the Docker surface (BP-009, BP-010, BP-013, BP-023).
  *
  * These are regression tripwires, not a compose linter: each test pins one
- * confirmed bug class from the BF-01 run so reintroducing it fails `bun test`.
+ * confirmed bug class from a slice run so reintroducing it fails `bun test`.
  *   BP-009 — a hard-coded published host port collided with a local Postgres.
  *   BP-010 — bun's isolated linker produced a node_modules that did not
  *            survive the runtime stage's single-directory COPY.
  *   BP-013 — a published port bound 0.0.0.0, exposing the dev api beyond
  *            loopback.
+ *   BP-023 — a new bun workspace was added to the root package.json but its
+ *            manifest was not COPYed into the api image, so `bun install
+ *            --frozen-lockfile` failed with "Workspace not found" — invisible
+ *            locally (cached image), red only on a fresh CI build.
  */
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
@@ -16,6 +20,24 @@ import { join } from "node:path";
 const repoRoot = join(import.meta.dir, "..", "..", "..");
 const compose = readFileSync(join(repoRoot, "docker-compose.yml"), "utf8");
 const apiDockerfile = readFileSync(join(repoRoot, "docker", "api.Dockerfile"), "utf8");
+const rootPkg = JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8")) as {
+  workspaces?: string[];
+};
+
+/** Concrete workspace directories from the root globs (globs expanded once). */
+function workspaceDirs(): string[] {
+  const dirs: string[] = [];
+  for (const pattern of rootPkg.workspaces ?? []) {
+    if (pattern.endsWith("/*")) {
+      // packages/* -> the api image only depends on packages/core today; the
+      // Dockerfile COPYs the specific member, so assert that member is present
+      // rather than every future sibling. Skip glob patterns here.
+      continue;
+    }
+    dirs.push(pattern);
+  }
+  return dirs;
+}
 
 /** Every `- "..."` list item inside a `ports:` block, quoted or not. */
 function publishedPorts(composeText: string): string[] {
@@ -68,5 +90,12 @@ describe("api image install", () => {
     for (const line of installLines) {
       expect(line).toContain("--linker hoisted");
     }
+  });
+
+  test("every non-glob root workspace manifest is COPYed for install (BP-023)", () => {
+    const missing = workspaceDirs().filter(
+      (dir) => !apiDockerfile.includes(`COPY ${dir}/package.json ${dir}/package.json`)
+    );
+    expect(missing).toEqual([]);
   });
 });

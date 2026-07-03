@@ -1,14 +1,17 @@
 # @bonfire/api runtime image. Bun runs TypeScript directly — no build step.
 #
 # Stage 1 resolves the workspace with manifests only (layer-cacheable): EVERY
-# workspace manifest must be present for bun install to resolve the workspace —
-# loop/package.json is copied for resolution only, its source never ships.
+# workspace manifest listed in the root package.json "workspaces" must be
+# present or `bun install --frozen-lockfile` fails with "Workspace not found".
+# loop/ and seed/ are copied for resolution only, their source never ships.
+# (Guarded by docker-invariants.test.ts against a forgotten new-workspace COPY.)
 FROM oven/bun:1.3.14-slim AS deps
 WORKDIR /app
 COPY package.json bun.lock tsconfig.json tsconfig.base.json ./
 COPY packages/core/package.json packages/core/package.json
 COPY apps/api/package.json apps/api/package.json
 COPY loop/package.json loop/package.json
+COPY seed/package.json seed/package.json
 # Hoisted linker: bun 1.3's default isolated linker scatters per-workspace
 # node_modules symlink dirs that don't survive the single COPY below; hoisted
 # keeps everything under root node_modules (workspace:* @bonfire/core still
@@ -22,6 +25,7 @@ COPY --from=deps /app/package.json /app/bun.lock /app/tsconfig.json /app/tsconfi
 COPY --from=deps /app/packages/core/package.json packages/core/package.json
 COPY --from=deps /app/apps/api/package.json apps/api/package.json
 COPY --from=deps /app/loop/package.json loop/package.json
+COPY --from=deps /app/seed/package.json seed/package.json
 COPY packages/core/tsconfig.json packages/core/tsconfig.json
 COPY packages/core/src packages/core/src
 COPY apps/api/tsconfig.json apps/api/tsconfig.json
