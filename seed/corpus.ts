@@ -33,7 +33,13 @@ export interface ReIdedResource {
 }
 
 function parseCorpusLine(line: string, path: string, expectedType: string): CorpusResource {
-  const raw: unknown = JSON.parse(line);
+  let raw: unknown;
+  try {
+    raw = JSON.parse(line);
+  } catch {
+    // Never echo fixture content into logs on a parse failure — location only.
+    throw new Error(`invalid JSON in ${path} (content not shown)`);
+  }
   const content = corpusLineSchema.parse(raw);
   const resourceType = content.resourceType;
   const id = content.id;

@@ -53,6 +53,9 @@ rules:
           - pattern: $SINK.raw($A + ...)
     paths:
       exclude:
+        # The behaviour corpus contains deliberately-bad code, annotated and
+        # enforced by `semgrep scan --test sgrule-tests/semgrep` instead.
+        - "sgrule-tests/semgrep/**"
         - "**/*.test.ts"
         - "**/*.test.tsx"
         - "**/*.test.mjs"
@@ -241,6 +244,10 @@ rules:
         - https://github.com/porsager/postgres#json
     patterns:
       - pattern-regex: '\$\{\s*JSON\.stringify\([^`]*?\)\s*\}\s*::\s*jsonb'
+    paths:
+      exclude:
+        # Deliberately-bad corpus lines live under the --test harness instead.
+        - "sgrule-tests/semgrep/**"
 
   # --------------------------------------------------------------------------
   # HEALTHCARE CUSTOM RULE 2 — Authorization must be DENY-BY-DEFAULT. Flags the

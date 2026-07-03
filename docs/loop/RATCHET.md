@@ -5,7 +5,7 @@
 > `loop ratchet` (and the test suite): if the guard artifact disappears,
 > the check fails and the bug is considered reopened.
 
-10 guarded · 6 open (debt owed a guard)
+11 guarded · 8 open (debt owed a guard)
 
 ## BP-001 — gate-crash-read-as-pass — GUARDED
 
@@ -87,12 +87,12 @@
 - Guard: `test` → `loop/src/gates/docker-invariants.test.ts::api image bun install uses the hoisted linker`
 - Recorded: 2026-07-03
 
-## BP-011 — gate-false-positive-pushes-unsafe-workaround — OPEN
+## BP-011 — gate-false-positive-pushes-unsafe-workaround — GUARDED
 
 - Symptom: The template clause of semgrep rule bonfire-mcp-tool-raw-sql-concat flagged postgres.js sql tagged-template queries — the safe, bound-parameter idiom — so BF-01 shipped a sql.unsafe(constantLiteral, [params]) workaround to pass the gate: the gate steered code toward a less-reviewable API.
 - Root cause: A text regex cannot distinguish a tagged template (interpolations bound as parameters by the sql tag) from an untagged template literal that splices values into statement text.
-- Fix: Operator-reviewed refinement: templates tagged exactly sql are exempted via pattern-not-regex; untagged SQL-shaped templates, string concat, near-miss tags (mysql/rawsql), and unsafe() with interpolation all remain banned; inline suppressions stay banned by the suppressions gate.
-- Planned guard: semgrep behaviour-test corpus (semgrep --test fixtures proving sql tagged templates pass and untagged interpolation fails) wired into the semgrep gate — queue with the BF-02 wave, alongside restoring tenant.ts's tagged template
+- Fix: Operator-reviewed rule refinement (exemption keyed to templates tagged exactly sql, statement-anchored keywords) + tenant.ts restored to the tagged-template idiom + a semgrep --test behaviour corpus (sgrule-tests/semgrep, run by the semgrep gate and CI) proving every rule fires on known-bad and stays silent on sanctioned idioms + ast-grep no-sql-tag-impersonation banning fake `sql` tag declarations.
+- Guard: `test` → `sgrule-tests/semgrep/semgrep.ts::ruleid: bonfire-mcp-tool-raw-sql-concat`
 - Recorded: 2026-07-03
 
 ## BP-012 — raw-db-client-bypasses-tenant-boundary — GUARDED
@@ -133,4 +133,28 @@
 - Root cause: turbo task output globs `**/*.tsbuildinfo` walked THROUGH the node_modules workspace symlink during output capture; a later cache restore materialized the captured path as a real directory OVER the symlink, shadowing the package.
 - Fix: Output globs scoped to the workspace's own build dirs (dist/**, build/**); the noEmit typecheck task declares no outputs and dependsOn ^build so referenced dist is always fresh; poisoned cache purged; the turbo-outputs test rejects any output glob starting at ** or touching node_modules.
 - Guard: `test` → `loop/src/gates/turbo-outputs.test.ts::output globs never start at ** or traverse node_modules`
+- Recorded: 2026-07-03
+
+## BP-017 — error-message-echoes-scanned-content — OPEN
+
+- Symptom: JSON.parse failures in the PHI scanner and seed propagated the runtime's error message verbatim to logs; those messages embed a snippet of the source text, so scanning a malformed PHI-bearing file could print a fragment of a real identifier.
+- Root cause: Operational-error paths trusted exception messages, but parser exceptions quote their input — the one tool pointed at suspect files could leak what it exists to catch.
+- Fix: All JSON.parse sites in scripts/synthetic-scan and seed catch and rethrow location-only messages ('invalid JSON in <file> (content not shown)'); the catch-all handlers now only ever see redacted messages on parse paths.
+- Planned guard: scanner test harness (H5 eval wave): feed a malformed PHI-bearing fixture and assert the operational-error output contains no scanned-file content
+- Recorded: 2026-07-03
+
+## BP-018 — append-only-by-forgotten-revoke — OPEN
+
+- Symptom: Append-only tables are one forgotten REVOKE away from mutable: the initdb default privileges pre-grant UPDATE/DELETE on every FUTURE table, so a migration that omits the explicit REVOKE silently ships a mutable 'append-only' table.
+- Root cause: docker/initdb/010-roles.sh ALTER DEFAULT PRIVILEGES grants S/I/U/D wholesale, making immutability opt-out per migration instead of opt-in.
+- Fix: BF-02's migration carries explicit REVOKEs (proven by has_table_privilege tests); the structural fix — flip the default grant to SELECT,INSERT and grant U/D explicitly on mutable tables, plus a catalog posture test over declared append-only tables — needs a docker/** harness wave.
+- Planned guard: harness wave: initdb default-privilege flip to S/I-only + a catalog posture test enumerating append-only tables (queue before BF-05's audit table lands)
+- Recorded: 2026-07-03
+
+## BP-019 — unique-constraint-existence-oracle — OPEN
+
+- Symptom: PK/UNIQUE/FK enforcement bypasses RLS by design: a caller supplying its own resource id gets a distinguishable failure when that id exists in ANOTHER practice — a cross-tenant id-existence probe and an id-squatting DoS (ids only, never content; random UUIDs make blind probing infeasible).
+- Root cause: fhir_resources uses a global PRIMARY KEY (id) + UNIQUE (type,id); uniqueness errors are constraint-level, beneath the RLS policy filter.
+- Fix: Deferred by decision: tenant-scoped composite keys (PK (practice_id,id)) or normalized 23505 handling on insert — decide with BF-04's projection identity design; danger is LOW while ids are server-generated UUIDs.
+- Planned guard: eval (H5): unique-constraint existence-oracle case — a practice-B insert with practice-A's id must be indistinguishable from any other failed insert
 - Recorded: 2026-07-03

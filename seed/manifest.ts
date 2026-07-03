@@ -46,9 +46,9 @@ export function loadManifest(
   let raw: unknown;
   try {
     raw = JSON.parse(readFileSync(manifestPath, "utf8"));
-  } catch (cause) {
-    const detail = cause instanceof Error ? cause.message : "unreadable file";
-    return err({ code: "MANIFEST_INVALID", message: `cannot read manifest: ${detail}` });
+  } catch {
+    // Parse errors embed source snippets; report the location only.
+    return err({ code: "MANIFEST_INVALID", message: "manifest is unreadable or not valid JSON" });
   }
   const parsed = corpusManifestSchema.safeParse(raw);
   if (!parsed.success) {

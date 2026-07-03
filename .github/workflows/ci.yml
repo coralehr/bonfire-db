@@ -130,6 +130,20 @@ jobs:
           else
             bunx turbo run "${TASK}"
           fi
+      # Synthetic-only tripwire as a PERMANENT blocking step (inside this
+      # required check, so no branch-protection change): the scanner self-tests
+      # every detector class (exit 2 if any fails to fire), then sweeps the
+      # committed fixture corpus. A commit adding real-PHI-shaped data to
+      # fixtures fails CI here, not just in a slice's one-shot verify chain.
+      - name: Synthetic-only scan (PHI tripwire)
+        if: matrix.task == 'test'
+        run: |
+          set -euo pipefail
+          if [ -f scripts/synthetic-scan/index.ts ]; then
+            bun run scan:synthetic
+          else
+            echo "no synthetic scanner yet; nothing to sweep"
+          fi
       - name: Tear down product stack
         if: always() && matrix.task == 'test'
         run: |
@@ -162,6 +176,18 @@ jobs:
             --exclude build \
             --exclude .turbo \
             --exclude coverage
+      # Rule behaviour corpus (ratchet BP-011): annotated fixtures prove each
+      # rule fires on known-bad code and stays silent on the sanctioned idioms,
+      # so a rule edit that weakens either side fails this required check.
+      - name: Semgrep rule behaviour tests
+        shell: sh
+        run: |
+          set -eu
+          if [ -d sgrule-tests/semgrep ]; then
+            semgrep scan --test sgrule-tests/semgrep
+          else
+            echo "no semgrep behaviour corpus yet"
+          fi
 
   # ---------------------------------------------------------------------------
   # BLOCKING — secret scanning (gitleaks CLI, pinned + checksum-verified, explicit

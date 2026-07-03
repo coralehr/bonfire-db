@@ -1,0 +1,26 @@
+# Behaviour tests for no-sql-tag-impersonation. Run: bunx ast-grep test --skip-snapshot-tests
+id: no-sql-tag-impersonation
+valid:
+  - |
+    const sql = createSqlClient(target, { max: 1 });
+  - |
+    const sql = postgres(url, { max: 1 });
+  - |
+    await db.withTenant(practiceId, async (sql) => sql`select 1`);
+  - |
+    await client.begin(async (sql) => { await sql`select 1`; });
+  - |
+    function buildQuery(parts) { return parts.join(" "); }
+invalid:
+  - |
+    function sql(strings, ...values) { return strings.join("?"); }
+  - |
+    const sql = (strings, ...values) => strings.raw.join("");
+  - |
+    const sql = (text) => { return text; };
+  - |
+    let sql = (s) => s;
+  - |
+    const sql = function (strings) { return strings[0]; };
+  - |
+    const sql = async (text) => runRaw(text);

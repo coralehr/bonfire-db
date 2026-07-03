@@ -56,13 +56,24 @@ function parseObject(raw: unknown, context: string): Record<string, unknown> {
   return raw;
 }
 
+// JSON.parse error messages embed a snippet of the source text. The scanner is
+// pointed at SUSPECT files, so that snippet could be a real identifier — parse
+// failures must surface the location only, never the content.
+function parseJsonRedacted(text: string, where: string): unknown {
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    throw new Error(`invalid JSON in ${where} (content not shown)`);
+  }
+}
+
 function parseResources(fileAbs: string): ParsedResource[] {
   const text = readFileSync(fileAbs, "utf8");
   const parsed: ParsedResource[] = [];
   if (fileAbs.endsWith(".ndjson")) {
     text.split("\n").forEach((line, index) => {
       if (line.trim().length === 0) return;
-      const raw: unknown = JSON.parse(line);
+      const raw = parseJsonRedacted(line, `${fileAbs}:${String(index + 1)}`);
       parsed.push({
         resource: parseObject(raw, `${fileAbs}:${String(index + 1)}`),
         pointer: `/${String(index)}`
@@ -70,7 +81,7 @@ function parseResources(fileAbs: string): ParsedResource[] {
     });
     return parsed;
   }
-  const raw: unknown = JSON.parse(text);
+  const raw = parseJsonRedacted(text, fileAbs);
   return [{ resource: parseObject(raw, fileAbs), pointer: "" }];
 }
 
