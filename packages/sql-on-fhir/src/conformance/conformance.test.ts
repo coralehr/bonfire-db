@@ -5,6 +5,7 @@
  * recount of the vendored suite files.
  */
 import { describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { cpSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -32,11 +33,31 @@ function runReal(): ConformanceReport {
   return runSuite(loadRealSuite());
 }
 
+/** Copy the suite to a temp dir, mutate it, and assert the load fails closed. */
+function expectLoadFailure(mutate: (tmp: string) => void, code: string): void {
+  const tmp = mkdtempSync(join(tmpdir(), "bf04-suite-mutation-"));
+  try {
+    cpSync(SUITE_DIR, tmp, { recursive: true });
+    mutate(tmp);
+    const result = loadSuite(tmp);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe(code);
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
 describe("conformance run (real vendored suite)", () => {
   test("passes every shareable case and declares the rest", () => {
     const report = runReal();
     expect(report.failed).toBe(0);
-    expect(report.passed).toBe(report.manifestTotalCases - report.skippedDeclared);
+    // HARD pass floor — not derived from the report's own fields (a derived
+    // assertion is tautological when failed === 0). 133 shareable + 11
+    // declared-unsupported is the pinned headline; changing either number
+    // must be a deliberate, reviewed edit of this test AND the manifest.
+    expect(report.passed).toBe(133);
+    expect(report.skippedDeclared).toBe(11);
+    expect(report.passed).toBe(report.manifestShareableCases);
     expect(exitCodeForReport(report)).toBe(0);
   });
 
@@ -86,31 +107,17 @@ describe("fake-conformance negative controls", () => {
   });
 
   test("a byte-tampered suite copy fails closed on sha256 (never runs)", () => {
-    const tmp = mkdtempSync(join(tmpdir(), "bf04-suite-tamper-"));
-    try {
-      cpSync(SUITE_DIR, tmp, { recursive: true });
+    expectLoadFailure((tmp) => {
       const target = join(tmp, "tests", "basic.json");
       const original = readFileSync(target, "utf8");
       writeFileSync(target, original.replace('"pt1"', '"pt9"'), "utf8");
-      const result = loadSuite(tmp);
-      expect(result.ok).toBe(false);
-      if (!result.ok) expect(result.error.code).toBe("SUITE_FILE_TAMPERED");
-    } finally {
-      rmSync(tmp, { recursive: true, force: true });
-    }
+    }, "SUITE_FILE_TAMPERED");
   });
 
   test("a missing suite file fails closed as a manifest mismatch", () => {
-    const tmp = mkdtempSync(join(tmpdir(), "bf04-suite-missing-"));
-    try {
-      cpSync(SUITE_DIR, tmp, { recursive: true });
+    expectLoadFailure((tmp) => {
       rmSync(join(tmp, "tests", "basic.json"));
-      const result = loadSuite(tmp);
-      expect(result.ok).toBe(false);
-      if (!result.ok) expect(result.error.code).toBe("SUITE_MANIFEST_MISMATCH");
-    } finally {
-      rmSync(tmp, { recursive: true, force: true });
-    }
+    }, "SUITE_MANIFEST_MISMATCH");
   });
 
   test("an allowlisted case that passes is a failure (stale allowlist)", () => {
@@ -201,5 +208,102 @@ describe("fake-conformance negative controls", () => {
     const report = runSuite(withBrokenCase);
     expect(report.failures.some((f) => f.title === "undeclared-unsupported-feature")).toBe(true);
     expect(exitCodeForReport(report)).toBe(1);
+  });
+});
+
+describe("conformance-headline drift controls (allowlist cannot absorb regressions)", () => {
+  test("downgrading a failing case into declaredUnsupported still exits non-zero (pass floor)", () => {
+    const suite = loadRealSuite();
+    // Attack shape: regress one shareable case (its expectation no longer
+    // matches) AND declare it unsupported, leaving shareableCases at 133.
+    const downgraded: LoadedSuite = {
+      ...suite,
+      manifest: {
+        ...suite.manifest,
+        declaredUnsupported: [
+          ...suite.manifest.declaredUnsupported,
+          { file: "basic.json", title: "basic attribute", reason: "quietly regressed" }
+        ]
+      },
+      files: suite.files.map((entry) =>
+        entry.name === "basic.json"
+          ? {
+              name: entry.name,
+              file: {
+                ...entry.file,
+                tests: entry.file.tests.map((suiteCase) =>
+                  suiteCase.title === "basic attribute"
+                    ? { ...suiteCase, expect: [{ id: "regressed-now-fails" }] }
+                    : suiteCase
+                )
+              }
+            }
+          : entry
+      )
+    };
+    const report = runSuite(downgraded);
+    expect(report.failed).toBe(0);
+    expect(report.passed).toBe(132);
+    expect(report.skippedDeclared).toBe(12);
+    expect(exitCodeForReport(report)).toBe(1);
+  });
+
+  test("a manifest whose allowlist grows without shrinking shareableCases refuses to load", () => {
+    expectLoadFailure((tmp) => {
+      const manifestPath = join(tmp, "MANIFEST.json");
+      const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
+        declaredUnsupported: { file: string; title: string; reason: string }[];
+      };
+      manifest.declaredUnsupported.push({
+        file: "basic.json",
+        title: "basic attribute",
+        reason: "downgraded without touching shareableCases"
+      });
+      writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+    }, "SUITE_MANIFEST_MISMATCH");
+  });
+
+  test("a case carrying no supported expectation kind refuses to load (no vacuous pass)", () => {
+    expectLoadFailure((tmp) => {
+      const target = join(tmp, "tests", "basic.json");
+      const file = JSON.parse(readFileSync(target, "utf8")) as {
+        tests: { title: string; view: unknown }[];
+      };
+      file.tests.push({
+        title: "expectCount-only case (unmodeled expectation)",
+        view: { resource: "Patient", select: [{ column: [{ name: "id", path: "id" }] }] },
+        ...{ expectCount: 3 }
+      });
+      const bytes = JSON.stringify(file, null, 2);
+      writeFileSync(target, bytes, "utf8");
+      const manifestPath = join(tmp, "MANIFEST.json");
+      const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
+        totalCases: number;
+        shareableCases: number;
+        files: Record<string, { sha256: string; cases: number }>;
+      };
+      manifest.files["basic.json"] = {
+        sha256: createHash("sha256").update(bytes).digest("hex"),
+        cases: file.tests.length
+      };
+      manifest.totalCases += 1;
+      manifest.shareableCases += 1;
+      writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+    }, "SUITE_FILE_INVALID");
+  });
+
+  test("an empty report never exits 0", () => {
+    const empty: ConformanceReport = {
+      total: 0,
+      passed: 0,
+      failed: 0,
+      skippedDeclared: 0,
+      failures: [],
+      recountedCases: 0,
+      manifestTotalCases: 0,
+      manifestShareableCases: 0,
+      official: {}
+    };
+    expect(exitCodeForReport(empty)).toBe(1);
   });
 });

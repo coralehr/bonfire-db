@@ -116,5 +116,15 @@ export function loadSuite(suiteDir: string): Result<LoadedSuite, SuiteError> {
       message: `recounted ${String(recountedCases)} cases; manifest pins ${String(manifest.data.totalCases)}`
     });
   }
+  // The pass-floor arithmetic must hold INSIDE the manifest itself: growing
+  // declaredUnsupported without shrinking shareableCases (or vice versa) is a
+  // red load, so the allowlist cannot silently absorb newly-failing cases.
+  const impliedShareable = manifest.data.totalCases - manifest.data.declaredUnsupported.length;
+  if (impliedShareable !== manifest.data.shareableCases) {
+    return err({
+      code: "SUITE_MANIFEST_MISMATCH",
+      message: `manifest arithmetic broken: totalCases - declaredUnsupported = ${String(impliedShareable)} but shareableCases pins ${String(manifest.data.shareableCases)}`
+    });
+  }
   return ok({ manifest: manifest.data, files, recountedCases });
 }

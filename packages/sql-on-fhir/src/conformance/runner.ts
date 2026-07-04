@@ -160,6 +160,7 @@ export function runSuite(suite: LoadedSuite): ConformanceReport {
     failures: tally.failures,
     recountedCases: suite.recountedCases,
     manifestTotalCases: suite.manifest.totalCases,
+    manifestShareableCases: suite.manifest.shareableCases,
     official
   };
 }

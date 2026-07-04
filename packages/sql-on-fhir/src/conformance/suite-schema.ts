@@ -35,15 +35,24 @@ export type SuiteManifest = z.infer<typeof manifestSchema>;
 
 const suiteResourceSchema = z.record(z.string(), jsonValueSchema);
 
-const suiteCaseSchema = z.object({
-  title: z.string().min(1),
-  description: z.string().optional(),
-  tags: z.array(z.string()).optional(),
-  view: jsonValueSchema,
-  expect: z.array(z.record(z.string(), jsonValueSchema)).optional(),
-  expectError: z.boolean().optional(),
-  expectColumns: z.array(z.string()).optional()
-});
+const suiteCaseSchema = z
+  .object({
+    title: z.string().min(1),
+    description: z.string().optional(),
+    tags: z.array(z.string()).optional(),
+    view: jsonValueSchema,
+    expect: z.array(z.record(z.string(), jsonValueSchema)).optional(),
+    expectError: z.boolean().optional(),
+    expectColumns: z.array(z.string()).optional()
+  })
+  // Fail-closed on unknown expectation kinds: Zod strips keys it does not
+  // model (e.g. upstream `expectCount`), and a case with NO modeled
+  // expectation would run zero assertions yet count as passed. A future
+  // re-vendor introducing such a case must break the load, not fake a pass.
+  .refine(
+    (c) => c.expect !== undefined || c.expectError === true || c.expectColumns !== undefined,
+    { message: "case carries no supported expectation (expect/expectError/expectColumns)" }
+  );
 
 export type SuiteCase = z.infer<typeof suiteCaseSchema>;
 

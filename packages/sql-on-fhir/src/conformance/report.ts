@@ -31,16 +31,27 @@ export interface ConformanceReport {
   /** Cases re-counted from the parsed suite files (independent of counters). */
   readonly recountedCases: number;
   readonly manifestTotalCases: number;
+  /** The manifest's pinned pass floor: every shareable case must PASS. */
+  readonly manifestShareableCases: number;
   readonly official: OfficialReport;
 }
 
-/** 0 only for a complete, honest run: no failures and consistent counts. */
+/**
+ * 0 only for a complete, honest run: non-empty, no failures, consistent
+ * counts, AND the pass floor holds — passed must equal the manifest's pinned
+ * shareableCases and skips must equal exactly the declared remainder. Without
+ * the floor, growing the allowlist could downgrade newly-failing cases to
+ * "declared" and still exit 0 (the conformance-headline-drift class).
+ */
 export function exitCodeForReport(report: ConformanceReport): number {
   const executed = report.passed + report.failed + report.skippedDeclared;
   const consistent =
+    report.total > 0 &&
     report.total === executed &&
     report.total === report.recountedCases &&
-    report.recountedCases === report.manifestTotalCases;
+    report.recountedCases === report.manifestTotalCases &&
+    report.passed === report.manifestShareableCases &&
+    report.skippedDeclared === report.manifestTotalCases - report.manifestShareableCases;
   return report.failed === 0 && consistent ? 0 : 1;
 }
 

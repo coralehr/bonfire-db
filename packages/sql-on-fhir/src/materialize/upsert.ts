@@ -59,11 +59,50 @@ function projectAll(
   return ok(projected);
 }
 
+type CurrentRow = z.infer<typeof currentRowSchema>;
+
+/**
+ * Fetch + boundary-validate the canonical row inside the tenant tx. Fails
+ * closed on invisibility AND on key divergence: vd rows are keyed and DELETEd
+ * by the projected getResourceKey() (= content.id) while the upsert is
+ * addressed by fhir_resources.id — if the two diverge, stale rows under the
+ * old key would survive every upsert and drift from a rebuild.
+ */
+async function fetchCanonicalRow(
+  sql: TenantSql,
+  resourceId: string
+): Promise<Result<CurrentRow, ProjectionError>> {
+  const currentRows = await sql`
+    select type, version_id::text as version_id, last_updated::text as last_updated, content
+    from fhir_resources
+    where id = ${resourceId}`;
+  const current = currentRowSchema.safeParse(currentRows[0]);
+  if (!current.success) {
+    return err({
+      code: "PROJECTION_RESOURCE_NOT_FOUND",
+      message: "resource is not visible in this tenant transaction"
+    });
+  }
+  if (current.data.content.id !== resourceId) {
+    return err({
+      code: "PROJECTION_KEY_MISMATCH",
+      message: "canonical content.id does not equal the fhir_resources row id"
+    });
+  }
+  return ok(current.data);
+}
+
 /**
  * Recompute the vd_* and spidx rows for ONE resource inside the caller's
  * tenant transaction (DELETE + INSERT keyed on the resource id; RLS scopes
  * both). Reads version_id/last_updated from the canonical row in-tx — a
  * missing resource is a typed error, never an invented projection.
+ *
+ * CALLER CONTRACT (the deferred write-path wiring must honor this): a typed
+ * err return means ZERO projection DML was issued — the caller must treat it
+ * as a failure of the whole canonical write (abort/throw so the transaction
+ * rolls back), or the canonical row commits with NO projection rows and the
+ * read surface goes stale until the next offline rebuild.
  */
 export async function upsertProjection(
   sql: TenantSql,
@@ -74,17 +113,9 @@ export async function upsertProjection(
   if (!parsedId.success) {
     return err({ code: "PROJECTION_INVALID_INPUT", message: "resourceId must be a UUID" });
   }
-  const currentRows = await sql`
-    select type, version_id::text as version_id, last_updated::text as last_updated, content
-    from fhir_resources
-    where id = ${parsedId.data}`;
-  const current = currentRowSchema.safeParse(currentRows[0]);
-  if (!current.success) {
-    return err({
-      code: "PROJECTION_RESOURCE_NOT_FOUND",
-      message: "resource is not visible in this tenant transaction"
-    });
-  }
+  const fetched = await fetchCanonicalRow(sql, parsedId.data);
+  if (!fetched.ok) return fetched;
+  const current = { data: fetched.data };
   const projected = projectAll(views, current.data.type, current.data.content);
   if (!projected.ok) return projected;
   const spidxRows = extractSearchParams(current.data.content);

@@ -26,6 +26,7 @@ export type ProjectionErrorCode =
   | "PROJECTION_VIEW_INVALID"
   | "PROJECTION_INVALID_INPUT"
   | "PROJECTION_RESOURCE_NOT_FOUND"
+  | "PROJECTION_KEY_MISMATCH"
   | "PROJECTION_ROW_INVALID";
 
 export type ViewError = BonfireError<ViewErrorCode>;

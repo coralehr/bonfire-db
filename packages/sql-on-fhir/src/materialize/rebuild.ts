@@ -61,6 +61,16 @@ function computeResource(
       message: "fhir_resources row failed boundary validation"
     });
   }
+  // Same policy as upsertProjection: vd rows are keyed by the projected
+  // getResourceKey() (= content.id), so a canonical row whose content.id
+  // diverges from its row id must fail the rebuild loudly — silently
+  // projecting it would drift the two writers apart (and hide corruption).
+  if (parsed.data.content.id !== parsed.data.id) {
+    return err({
+      code: "PROJECTION_KEY_MISMATCH",
+      message: `canonical content.id diverges from row id ${parsed.data.id}`
+    });
+  }
   const content: JsonObject = parsed.data.content;
   const vdRows: { table: string; rows: readonly Row[] }[] = [];
   for (const projection of projections) {
@@ -146,21 +156,34 @@ export async function rebuildProjections(
 ): Promise<Result<RebuildSummary, ProjectionError>> {
   const projections = planProjections(views);
   if (!projections.ok) return projections;
-  const rawRows = await ownerSql`
-    select id, type, practice_id, version_id::text as version_id,
-           last_updated::text as last_updated, content
-    from fhir_resources
-    order by id`;
-  const computed: ComputedResource[] = [];
-  for (const raw of rawRows) {
-    const resource = computeResource(raw, projections.data);
-    if (!resource.ok) return resource;
-    computed.push(resource.data);
-  }
   let summary: RebuildSummary | undefined;
-  await ownerSql.begin(async (sql) => {
-    summary = await writeAll(sql, projections.data, computed);
-  });
+  let computeError: ProjectionError | undefined;
+  try {
+    // Corpus scan and drop/create/refill share ONE transaction: the single
+    // SELECT is one snapshot, so no canonical write can slip between "read
+    // the corpus" and "write the projections" (the read-then-begin TOCTOU
+    // window). A compute error throws to roll back (only reads happened).
+    await ownerSql.begin(async (sql) => {
+      const rawRows = await sql`
+        select id, type, practice_id, version_id::text as version_id,
+               last_updated::text as last_updated, content
+        from fhir_resources
+        order by id`;
+      const computed: ComputedResource[] = [];
+      for (const raw of rawRows) {
+        const resource = computeResource(raw, projections.data);
+        if (!resource.ok) {
+          computeError = resource.error;
+          throw new Error(resource.error.code);
+        }
+        computed.push(resource.data);
+      }
+      summary = await writeAll(sql, projections.data, computed);
+    });
+  } catch (cause) {
+    if (computeError !== undefined) return err(computeError);
+    throw cause;
+  }
   if (summary === undefined) {
     return err({
       code: "PROJECTION_ROW_INVALID",

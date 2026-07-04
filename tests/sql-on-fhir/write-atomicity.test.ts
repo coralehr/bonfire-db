@@ -7,6 +7,7 @@
  */
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
+import { insertFhirResourceTx } from "../../packages/core/src/index.js";
 import { upsertProjection } from "../../packages/sql-on-fhir/src/index.js";
 import type { TestContext } from "./helpers.js";
 import {
@@ -67,6 +68,41 @@ describe("rolled-back write leaves ZERO rows anywhere", () => {
     if (!result.data.ok) {
       expect(result.data.error.code).toBe("PROJECTION_RESOURCE_NOT_FOUND");
     }
+  });
+
+  test("a canonical row whose content.id diverges from its row id is refused (key mismatch)", async () => {
+    // vd rows are keyed by the projected getResourceKey() (= content.id) but
+    // addressed by fhir_resources.id; divergence would strand stale rows
+    // under the old key on every upsert (projection-key-divergence class).
+    // The whole tx is rolled back at the end so the poisoned canonical row
+    // never survives into later rebuilds (which refuse it with the same code).
+    const practice = randomUUID();
+    const rowId = randomUUID();
+    const divergentContentId = randomUUID();
+    let upsertCode: string | undefined;
+    const result = await ctx.db.withTenant(practice, async (sql) => {
+      const inserted = await insertFhirResourceTx(sql, {
+        id: rowId,
+        type: "Patient",
+        content: { resourceType: "Patient", id: divergentContentId, active: true },
+        rawPayload: JSON.stringify({ resourceType: "Patient", id: divergentContentId })
+      });
+      if (!inserted.ok) throw new Error(inserted.error.message);
+      const upserted = await upsertProjection(sql, rowId, ctx.views);
+      upsertCode = upserted.ok ? "unexpected-ok" : upserted.error.code;
+      throw new Error("roll back the poisoned canonical row");
+    });
+    expect(result.ok).toBe(false);
+    expect(upsertCode).toBe("PROJECTION_KEY_MISMATCH");
+    // Nothing survived anywhere — canonical, vd, or spidx.
+    const counts = await ctx.owner`
+      select
+        (select count(*) from fhir_resources where id = ${rowId}) as canonical,
+        (select count(*) from vd_patient_demographics where id in (${rowId}, ${divergentContentId})) as vd,
+        (select count(*) from spidx where resource_id = ${rowId}) as spidx`;
+    expect(counts[0]?.canonical).toBe("0");
+    expect(counts[0]?.vd).toBe("0");
+    expect(counts[0]?.spidx).toBe("0");
   });
 });
 
