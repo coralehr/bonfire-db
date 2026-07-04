@@ -5,7 +5,7 @@
 > `loop ratchet` (and the test suite): if the guard artifact disappears,
 > the check fails and the bug is considered reopened.
 
-16 guarded · 9 open (debt owed a guard)
+18 guarded · 8 open (debt owed a guard)
 
 ## BP-001 — gate-crash-read-as-pass — GUARDED
 
@@ -63,12 +63,12 @@
 - Planned guard: eval: hash-chain tamper eval (BF-05/T9, loop/evals)
 - Recorded: 2026-06-25
 
-## BP-008 — lossy-fhir — OPEN
+## BP-008 — lossy-fhir — GUARDED
 
 - Symptom: Typed projections silently dropped FHIR fields; data appeared complete while the canonical record lost information.
 - Root cause: The typed model was treated as the source of truth, so fields it did not model vanished on write instead of being preserved in the canonical FHIR document.
-- Fix: FHIR R4 JSONB is canonical and the typed primitive is a projection; any dropped field requires a loss-ledger entry with ADR + human sign-off (BF-03).
-- Planned guard: eval: FHIR R4 round-trip eval (BF-03/T9, loop/evals)
+- Fix: FHIR R4 JSONB is canonical and the typed primitive is a projection (BF-03): the write path persists+hashes the mapped canonical FHIR, never the typed input; fhir:roundtrip enforces lossless-or-ledgered (a round-trip diff with no loss-ledger entry whose ADR exists FAILS the gate). Proven by the three-state inversion test.
+- Guard: `test` → `packages/core/src/fhir/roundtrip.test.ts::lossless-or-ledgered three-state inversion`
 - Recorded: 2026-06-25
 
 ## BP-009 — hardcoded-host-port-collision — GUARDED
@@ -206,3 +206,11 @@
 - Fix: Scoped un-ignore `!fixtures/synthetic/**/*.ndjson` (parallel to the existing `!drizzle/**/*.sql`), fixtures committed; scan:synthetic still sweeps the dir every run so only synthetic data lives there. The fixtures-tracked test asserts every manifest file is git-tracked and fails fast (no DB) if one is untracked or ignored.
 - Guard: `test` → `loop/src/gates/fixtures-tracked.test.ts::every manifest-listed fixture file is git-tracked`
 - Recorded: 2026-07-03
+
+## BP-026 — network-on-validate-write-path — GUARDED
+
+- Symptom: The BF-03 'validate-on-write makes zero network calls' invariant was proven only by a globalThis.fetch test spy — a partial proxy that a future node:http/https/undici/axios import would silently evade, reopening a blocking-network-call-on-write regression (flagged convergently by the BF-03 verifier and security-auditor).
+- Root cause: A behavioral invariant (no network on the write path) was guarded by a runtime spy on one API surface rather than a structural control over all of them.
+- Fix: ast-grep no-network-in-write-path bans fetch() calls and node:http/node:https/undici/axios/got imports under packages/core/src/{write,terminology}/** (tests exempt — they legitimately spy to prove the invariant). Terminology validation stays pure local SQL; RemoteTxValidator is a NotImplemented stub.
+- Guard: `ast-grep` → `sgrules/no-network-in-write-path.yml`
+- Recorded: 2026-07-04
