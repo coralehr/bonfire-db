@@ -14,7 +14,9 @@
  * regressing a shareable case and growing the allowlist) breaks the printed
  * counts against the independent recount, so this eval fails.
  */
-import { readdirSync, readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { cpSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fail, pass, repoRoot, runArtifact } from "./eval-util.js";
 
@@ -87,4 +89,67 @@ if (counts.failed !== 0 || counts.skipped !== declared) {
     `failed=${String(counts.failed)} skipped=${String(counts.skipped)} vs declared=${String(declared)}`
   );
 }
-pass(EVAL_ID, `printed counts verified against raw recount (${String(recount)} cases)`);
+
+/**
+ * MUTATION CANARY — the execution-truth control. Every check above is
+ * derivable from the MANIFEST + fixture bytes alone, so a runner that ECHOES
+ * the manifest instead of evaluating views would pass them. The canary breaks
+ * that: copy the suite, tamper ONE randomly-chosen shareable expectation,
+ * re-pin the tampered file's sha256 in the copied MANIFEST (counts
+ * unchanged), and point the CLI at the copy — a genuinely-evaluating runner
+ * MUST go red on it; a manifest-echoing fabricator reports it green.
+ */
+function runMutationCanary(): void {
+  const tmp = mkdtempSync(join(tmpdir(), "bf04-canary-"));
+  try {
+    cpSync(SUITE_DIR, tmp, { recursive: true });
+    const files = readdirSync(join(tmp, "tests")).filter((f) => f.endsWith(".json"));
+    const candidates: { file: string; index: number }[] = [];
+    for (const name of files) {
+      const parsed = JSON.parse(readFileSync(join(tmp, "tests", name), "utf8")) as {
+        tests: { tags?: string[]; expect?: unknown }[];
+      };
+      parsed.tests.forEach((t, index) => {
+        if ((t.tags ?? []).includes("shareable") && t.expect !== undefined) {
+          candidates.push({ file: name, index });
+        }
+      });
+    }
+    const target = candidates[Math.floor(Math.random() * candidates.length)];
+    if (target === undefined) fail(EVAL_ID, "canary found no shareable case with expectations");
+    const targetPath = join(tmp, "tests", target.file);
+    const doc = JSON.parse(readFileSync(targetPath, "utf8")) as {
+      tests: { expect?: unknown }[];
+    };
+    const victim = doc.tests[target.index];
+    if (victim === undefined) fail(EVAL_ID, "canary index vanished");
+    victim.expect = [{ canary: "not-what-any-engine-produces" }];
+    const bytes = JSON.stringify(doc, null, 2);
+    writeFileSync(targetPath, bytes, "utf8");
+    const manifestPath = join(tmp, "MANIFEST.json");
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
+      files: Record<string, { sha256: string; cases: number }>;
+    };
+    const entry = manifest.files[target.file];
+    if (entry === undefined) fail(EVAL_ID, `canary file missing from manifest: ${target.file}`);
+    entry.sha256 = createHash("sha256").update(bytes).digest("hex");
+    writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+    const canaryRun = runArtifact(EVAL_ID, ["bun", "run", "conformance"], {
+      SQL_ON_FHIR_SUITE_DIR: tmp
+    });
+    if (canaryRun.status === 0) {
+      fail(
+        EVAL_ID,
+        `MUTATION CANARY PASSED GREEN (${target.file}#${String(target.index)}): the runner did not actually evaluate the tampered case — manifest-echoing fake-conformance`
+      );
+    }
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+runMutationCanary();
+pass(
+  EVAL_ID,
+  `printed counts verified against raw recount (${String(recount)} cases) + mutation canary red`
+);

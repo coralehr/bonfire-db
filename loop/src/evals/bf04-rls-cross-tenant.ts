@@ -32,18 +32,22 @@ interface CountRow {
 
 function count(rows: readonly unknown[]): number {
   const row = rows[0] as CountRow | undefined;
-  return row === undefined ? Number.NaN : Number(row.n);
+  const n = row === undefined ? Number.NaN : Number(row.n);
+  // Fail-closed: NaN silently skips `<` comparisons, so refuse it here.
+  if (!Number.isInteger(n)) fail(EVAL_ID, "count query returned a non-integer — aliasing drift?");
+  return n;
 }
 
 const practices = await owner`
   select practice_id::text as practice_id, count(*)::int as rows
   from vd_patient_demographics group by practice_id order by practice_id`;
-if (practices.length < MIN_PRACTICES) {
+const spidxPractices = count(await owner`select count(distinct practice_id)::text as n from spidx`);
+if (practices.length < MIN_PRACTICES || spidxPractices < MIN_PRACTICES) {
   await owner.end({ timeout: 5 });
   await app.end({ timeout: 5 });
   fail(
     EVAL_ID,
-    `need >= ${String(MIN_PRACTICES)} seeded practices in vd_patient_demographics, found ${String(practices.length)} — boot order (seed + projections:rebuild) missing?`
+    `need >= ${String(MIN_PRACTICES)} seeded practices in vd_patient_demographics (found ${String(practices.length)}) AND spidx (found ${String(spidxPractices)}) — boot order (seed + projections:rebuild) missing?`
   );
 }
 const practiceA = String(practices[0]?.practice_id);
@@ -51,13 +55,14 @@ const practiceA = String(practices[0]?.practice_id);
 const scoped = await app.begin(async (sql) => {
   await sql`select set_config('app.current_practice_id', ${practiceA}, true)`;
   const own = count(await sql`select count(*)::text as n from vd_patient_demographics`);
+  const ownSpidx = count(await sql`select count(*)::text as n from spidx`);
   const foreignVd = count(
     await sql`select count(*)::text as n from vd_patient_demographics where practice_id <> ${practiceA}::uuid`
   );
   const foreignSpidx = count(
     await sql`select count(*)::text as n from spidx where practice_id <> ${practiceA}::uuid`
   );
-  return { own, foreignVd, foreignSpidx };
+  return { own, ownSpidx, foreignVd, foreignSpidx };
 });
 const garbage = await app.begin(async (sql) => {
   await sql`select set_config('app.current_practice_id', 'not-a-uuid-at-all', true)`;
@@ -68,7 +73,8 @@ const unset = count(await app`select count(*)::text as n from vd_patient_demogra
 await owner.end({ timeout: 5 });
 await app.end({ timeout: 5 });
 
-if (scoped.own < 1) fail(EVAL_ID, "vacuous: practice A sees zero of its own rows");
+if (scoped.own < 1) fail(EVAL_ID, "vacuous: practice A sees zero of its own vd rows");
+if (scoped.ownSpidx < 1) fail(EVAL_ID, "vacuous: practice A sees zero of its own spidx rows");
 if (scoped.foreignVd !== 0 || scoped.foreignSpidx !== 0) {
   fail(
     EVAL_ID,

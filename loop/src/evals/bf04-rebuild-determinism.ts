@@ -53,7 +53,35 @@ function rebuildOnce(): void {
   if (run.status !== 0) fail(EVAL_ID, `rebuild exited ${String(run.status)}:\n${run.output}`);
 }
 
+/** The spidx logical columns the hash covers must equal the LIVE schema. */
+async function assertSpidxColumnsPinned(owner: postgres.Sql): Promise<void> {
+  const expected = [
+    "practice_id",
+    "resource_id",
+    "resource_type",
+    "param_name",
+    "param_type",
+    "token_system",
+    "token_code",
+    "ref_value",
+    "date_low",
+    "date_high"
+  ];
+  const live = await owner`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'spidx' and is_identity = 'NO'
+    order by ordinal_position`;
+  const names = live.map((row) => String(row.column_name));
+  if (JSON.stringify(names) !== JSON.stringify(expected)) {
+    fail(
+      EVAL_ID,
+      `spidx logical columns drifted from the hash coverage: live=[${names.join(",")}] — update the eval's row(...) hash lists together with the schema`
+    );
+  }
+}
+
 const owner = postgres(ownerUrl(), { max: 1, onnotice: () => undefined });
+await assertSpidxColumnsPinned(owner);
 rebuildOnce();
 const first = await hashAllTables(owner);
 rebuildOnce();
@@ -62,6 +90,15 @@ await owner.end({ timeout: 5 });
 
 if (first.size < 2)
   fail(EVAL_ID, `only ${String(first.size)} tables hashed — rebuild produced nothing?`);
+if (first.size !== second.size) {
+  fail(
+    EVAL_ID,
+    `table SET drifted across rebuilds: ${String(first.size)} -> ${String(second.size)}`
+  );
+}
+for (const table of second.keys()) {
+  if (!first.has(table)) fail(EVAL_ID, `table ${table} appeared only on the second rebuild`);
+}
 for (const [table, hash] of first) {
   const other = second.get(table);
   if (other !== hash) {

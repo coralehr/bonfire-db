@@ -5,7 +5,8 @@
     "tsconfig.base.json",
     "tsconfig.json",
     "eslint.config.ts",
-    "eslint.config.js"
+    "eslint.config.js",
+    ".github/workflows/**"
   ],
   "globalEnv": ["CI"],
   "tasks": {

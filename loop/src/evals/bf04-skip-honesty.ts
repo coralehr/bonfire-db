@@ -12,12 +12,13 @@
  * Inversion: an undeclared skip, a case silently downgraded in the artifact,
  * or an allowlist entry with no matching artifact case fails this eval.
  */
-import { readFileSync } from "node:fs";
+import { readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { fail, pass, repoRoot, runArtifact } from "./eval-util.js";
 
 const EVAL_ID = "bf04-skip-honesty";
 const DECLARED_MARKER = "declared unsupported:";
+const REPORT_PATH = join(repoRoot, "packages", "sql-on-fhir", "test_report.json");
 
 type OfficialReport = Record<
   string,
@@ -32,12 +33,12 @@ function key(file: string, title: string): string {
   return `${file}::${title}`;
 }
 
+// A stale artifact from a previous run must never vouch for THIS run.
+rmSync(REPORT_PATH, { force: true });
 const run = runArtifact(EVAL_ID, ["bun", "run", "conformance"]);
 if (run.status !== 0) fail(EVAL_ID, `conformance CLI exited ${String(run.status)}:\n${run.output}`);
 
-const report = JSON.parse(
-  readFileSync(join(repoRoot, "packages", "sql-on-fhir", "test_report.json"), "utf8")
-) as OfficialReport;
+const report = JSON.parse(readFileSync(REPORT_PATH, "utf8")) as OfficialReport;
 const manifest = JSON.parse(
   readFileSync(join(repoRoot, "fixtures", "sql-on-fhir", "MANIFEST.json"), "utf8")
 ) as Manifest;

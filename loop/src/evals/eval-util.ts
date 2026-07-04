@@ -26,11 +26,23 @@ export interface RunResult {
   readonly output: string;
 }
 
+/** Ceiling per artifact run: a wedged DB must fail the eval, not hang CI. */
+const RUN_TIMEOUT_MS = 600_000;
+
 /** Run a repo script as a subprocess; spawn failure is a loud eval failure. */
-export function runArtifact(evalId: string, argv: readonly string[]): RunResult {
+export function runArtifact(
+  evalId: string,
+  argv: readonly string[],
+  env?: Readonly<Record<string, string>>
+): RunResult {
   const [command, ...args] = argv;
   if (command === undefined) fail(evalId, "empty argv");
-  const run = spawnSync(command, args, { cwd: repoRoot, encoding: "utf8" });
+  const run = spawnSync(command, args, {
+    cwd: repoRoot,
+    encoding: "utf8",
+    timeout: RUN_TIMEOUT_MS,
+    env: env === undefined ? process.env : { ...process.env, ...env }
+  });
   if (run.error !== undefined)
     fail(evalId, `could not run ${argv.join(" ")}: ${run.error.message}`);
   return { status: run.status, output: `${run.stdout}${run.stderr}` };

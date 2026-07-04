@@ -93,6 +93,9 @@ jobs:
   build-test:
     name: build-test / ${{ matrix.task }}
     runs-on: ubuntu-latest
+    # A wedged DB or hung eval must fail this required check quickly, not
+    # stall it until GitHub's 360-minute default kill.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
