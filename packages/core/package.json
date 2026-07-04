@@ -27,5 +27,8 @@
     "drizzle-orm": "0.45.2",
     "postgres": "3.4.9",
     "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/fhir": "0.0.44"
   }
 }

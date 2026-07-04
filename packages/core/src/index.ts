@@ -8,7 +8,7 @@
 export type { JsonObject, JsonValue } from "./db/canonical-json.js";
 export { canonicalizeJson, contentHash } from "./db/canonical-json.js";
 export type { DatabaseTarget, EnvMap } from "./db/env.js";
-export { resolveDatabaseTarget } from "./db/env.js";
+export { devDatabaseUrl, resolveDatabaseTarget } from "./db/env.js";
 export type {
   FhirResourceRecord,
   FhirStoreErrorCode,
@@ -20,5 +20,39 @@ export type { MigrateErrorCode } from "./db/migrate.js";
 export { runMigrations } from "./db/migrate.js";
 export type { TenantDb, TenantSql, WithTenantErrorCode } from "./db/tenant.js";
 export { connectTenantDb } from "./db/tenant.js";
+export type { FhirCodingRef } from "./fhir/codings.js";
+export { collectCodings } from "./fhir/codings.js";
+export { parseJsonValue, toJsonObject } from "./fhir/json.js";
+export type {
+  LossLedgerEntry,
+  RoundTripEvaluation,
+  RoundTripViolation
+} from "./fhir/loss-ledger.js";
+export { evaluateRoundTrip, parseLossLedger } from "./fhir/loss-ledger.js";
+export type { MapperError, MapperErrorCode, RoundTrip } from "./fhir/mappers.js";
+export { fromFhir, roundTrip, toFhir } from "./fhir/mappers.js";
+export { US_CORE_PROFILES } from "./fhir/profiles.js";
+export type { JsonDiffKind, RoundTripDiff } from "./fhir/roundtrip-diff.js";
+export { decimalDiffs, structuralDiffs } from "./fhir/roundtrip-diff.js";
+export type { ScribeInput, ScribeResourceType } from "./fhir/scribe-schemas.js";
+export { scribeInputSchema } from "./fhir/scribe-schemas.js";
 export type { BonfireError, Result } from "./result.js";
 export { err, ok } from "./result.js";
+export type { TerminologyConceptLookup } from "./terminology/bundled-pack-validator.js";
+export { createBundledPackValidator } from "./terminology/bundled-pack-validator.js";
+export { createSqlConceptLookup } from "./terminology/concept-lookup.js";
+export { isSnomedSystem, isValidSctid } from "./terminology/snomed-format.js";
+export type {
+  TerminologyValidator,
+  ValidateCodeRequest,
+  ValidateCodeResult
+} from "./terminology/validator.js";
+export {
+  createRemoteTxValidator,
+  TerminologyNotImplementedError
+} from "./terminology/validator.js";
+export type { WriteError, WriteErrorCode } from "./write/errors.js";
+export type { TerminologyReport, TerminologyWarning } from "./write/terminology-check.js";
+export { checkResourceTerminology } from "./write/terminology-check.js";
+export type { WriteResult } from "./write/write-resource.js";
+export { writeScribeResource } from "./write/write-resource.js";
