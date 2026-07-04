@@ -8,12 +8,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const wiringRepoRoot: string = join(
-  dirname(fileURLToPath(import.meta.url)),
-  "..",
-  "..",
-  ".."
-);
+const wiringRepoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 
 export function readRepoFile(rel: string): string {
   return readFileSync(join(wiringRepoRoot, rel), "utf8");
