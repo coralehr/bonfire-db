@@ -89,6 +89,22 @@ function resourceTypeMismatch(type: string, content: JsonObject): FhirStoreError
   };
 }
 
+/**
+ * The canonical row id and the FHIR content.id must agree at WRITE time:
+ * projections key vd_* rows by the projected getResourceKey() (= content.id)
+ * while addressing them by fhir_resources.id, so a divergent pair strands
+ * stale projection rows and splits the two writers (BP-028,
+ * projection-key-divergence). The downstream upsert/rebuild guards refuse such
+ * rows too; this check stops them from ever being persisted.
+ */
+function contentIdMismatch(id: string, content: JsonObject): FhirStoreError | undefined {
+  if (content.id === id) return undefined;
+  return {
+    code: "INVALID_FHIR_INPUT",
+    message: "content.id must equal the canonical resource id"
+  };
+}
+
 /** Rows come back as postgres.js Row (untyped); parse, never cast. */
 function parseRow<T>(schema: z.ZodType<T>, rows: readonly unknown[], context: string): T {
   const parsed = schema.safeParse(rows[0]);
@@ -107,7 +123,7 @@ export async function insertFhirResourceTx(
   const parsed = insertInputSchema.safeParse(input);
   if (!parsed.success) return err(invalidInput(parsed.error));
   const { id, type, content, rawPayload } = parsed.data;
-  const mismatch = resourceTypeMismatch(type, content);
+  const mismatch = resourceTypeMismatch(type, content) ?? contentIdMismatch(id, content);
   if (mismatch !== undefined) return err(mismatch);
   const hash = contentHash(content);
   const inserted = await sql`
@@ -157,7 +173,7 @@ export async function updateFhirResourceTx(
   if (expectedVersionId !== undefined && expectedVersionId !== head.version_id) {
     return err({ code: "VERSION_CONFLICT", message: "expectedVersionId is stale" });
   }
-  const mismatch = resourceTypeMismatch(head.type, content);
+  const mismatch = resourceTypeMismatch(head.type, content) ?? contentIdMismatch(id, content);
   if (mismatch !== undefined) return err(mismatch);
   const hash = contentHash(content);
   await sql`

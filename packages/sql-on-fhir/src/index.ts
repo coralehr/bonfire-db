@@ -51,3 +51,5 @@ export {
   RESERVED_COLUMN_NAMES,
   viewDefinitionSchema
 } from "./view-definition.js";
+export type { ProjectedWriteError, ProjectedWriteResult } from "./write-projected.js";
+export { writeScribeResourceProjected } from "./write-projected.js";

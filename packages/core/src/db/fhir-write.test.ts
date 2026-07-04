@@ -288,3 +288,45 @@ describe("write_inputs replay parity", () => {
     expect(contentHash(readBack.data.content)).toBe(storedHash);
   });
 });
+
+describe("content.id must equal the canonical row id (BP-028 projection-key-divergence)", () => {
+  function expectInvalidFhirInput(result: {
+    ok: boolean;
+    data?: { ok: boolean; error?: { code?: string } };
+  }): void {
+    if (!result.ok) throw new Error("withTenant failed");
+    expect(result.data?.ok).toBe(false);
+    if (result.data !== undefined && !result.data.ok) {
+      expect(result.data.error?.code).toBe("INVALID_FHIR_INPUT");
+    }
+  }
+
+  function divergentPatient(family: string) {
+    return { resourceType: "Patient", id: randomUUID(), name: [{ family }] };
+  }
+
+  test("insert with a divergent content.id is refused with zero rows written", async () => {
+    const id = randomUUID();
+    const divergent = divergentPatient("Drift");
+    const result = await db.withTenant(PRACTICE, async (sql) =>
+      insertFhirResourceTx(sql, {
+        id,
+        type: "Patient",
+        content: divergent,
+        rawPayload: JSON.stringify(divergent)
+      })
+    );
+    expectInvalidFhirInput(result);
+    expect(await rowCounts(id)).toEqual({ latest: 0, history: 0, inputs: 0 });
+  });
+
+  test("update swapping in a divergent content.id is refused and versions do not advance", async () => {
+    const id = randomUUID();
+    await createPatient(id, "Stable");
+    const result = await db.withTenant(PRACTICE, async (sql) =>
+      updateFhirResourceTx(sql, { id, content: divergentPatient("Swap") })
+    );
+    expectInvalidFhirInput(result);
+    expect(await rowCounts(id)).toEqual({ latest: 1, history: 1, inputs: 1 });
+  });
+});

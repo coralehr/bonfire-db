@@ -5,31 +5,37 @@
  * lands byte-identically to a full offline rebuild (no drift between the two
  * writers).
  */
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
 import { insertFhirResourceTx } from "../../packages/core/src/index.js";
 import { rebuildProjections, upsertProjection } from "../../packages/sql-on-fhir/src/index.js";
 import type { TestContext } from "./helpers.js";
 import {
   allTableHashes,
-  closeContext,
-  initContext,
   insertCorpus,
   insertEntryTx,
   rebuildAll,
+  registerRebuiltContext,
   syntheticCorpus
 } from "./helpers.js";
 
 let ctx: TestContext;
-
-beforeAll(async () => {
-  ctx = initContext();
-  await rebuildAll(ctx.owner, ctx.views);
+registerRebuiltContext((c) => {
+  ctx = c;
 });
 
-afterAll(async () => {
-  await closeContext(ctx);
-});
+/** Outer withTenant ok + inner typed err with the given code (fail-closed). */
+function expectTypedErr(
+  result: { ok: boolean; data?: { ok: boolean; error?: { code?: string } } },
+  code: string
+): void {
+  expect(result.ok).toBe(true);
+  if (!result.ok) return;
+  expect(result.data?.ok).toBe(false);
+  if (result.data !== undefined && !result.data.ok) {
+    expect(result.data.error?.code).toBe(code);
+  }
+}
 
 describe("rolled-back write leaves ZERO rows anywhere", () => {
   test("insert + upsert + forced throw rolls back canonical, vd_* and spidx together", async () => {
@@ -62,47 +68,57 @@ describe("rolled-back write leaves ZERO rows anywhere", () => {
     const result = await ctx.db.withTenant(practice, async (sql) => {
       return await upsertProjection(sql, ghost, ctx.views);
     });
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.data.ok).toBe(false);
-    if (!result.data.ok) {
-      expect(result.data.error.code).toBe("PROJECTION_RESOURCE_NOT_FOUND");
-    }
+    expectTypedErr(result, "PROJECTION_RESOURCE_NOT_FOUND");
+  });
+
+  test("the tenant write path refuses a divergent content.id at insert time (BP-028)", async () => {
+    // Since the BF-04 close-out, core's insertFhirResourceTx fails closed on
+    // content.id !== id — a poisoned row can no longer enter via the tenant
+    // path at all (packages/core/src/db/fhir-write.test.ts pins the same
+    // check on the update path).
+    const practice = randomUUID();
+    const rowId = randomUUID();
+    const divergent = { resourceType: "Patient", id: randomUUID(), active: true };
+    const result = await ctx.db.withTenant(practice, async (sql) => {
+      return await insertFhirResourceTx(sql, {
+        id: rowId,
+        type: "Patient",
+        content: divergent,
+        rawPayload: JSON.stringify(divergent)
+      });
+    });
+    expectTypedErr(result, "INVALID_FHIR_INPUT");
   });
 
   test("a canonical row whose content.id diverges from its row id is refused (key mismatch)", async () => {
     // vd rows are keyed by the projected getResourceKey() (= content.id) but
     // addressed by fhir_resources.id; divergence would strand stale rows
     // under the old key on every upsert (projection-key-divergence class).
-    // The whole tx is rolled back at the end so the poisoned canonical row
-    // never survives into later rebuilds (which refuse it with the same code).
+    // Core now refuses divergence at write time, so plant the row as the
+    // OWNER (below the core check) — the upsert guard must fail closed on
+    // its own, defense-in-depth.
     const practice = randomUUID();
     const rowId = randomUUID();
     const divergentContentId = randomUUID();
-    let upsertCode: string | undefined;
-    const result = await ctx.db.withTenant(practice, async (sql) => {
-      const inserted = await insertFhirResourceTx(sql, {
-        id: rowId,
-        type: "Patient",
-        content: { resourceType: "Patient", id: divergentContentId, active: true },
-        rawPayload: JSON.stringify({ resourceType: "Patient", id: divergentContentId })
+    const divergent = { resourceType: "Patient", id: divergentContentId, active: true };
+    await ctx.owner`
+      insert into fhir_resources (id, type, practice_id, version_id, last_updated, content)
+      values (${rowId}, 'Patient', ${practice}, 1, now(), ${ctx.owner.json(divergent)})`;
+    try {
+      const result = await ctx.db.withTenant(practice, async (sql) => {
+        return await upsertProjection(sql, rowId, ctx.views);
       });
-      if (!inserted.ok) throw new Error(inserted.error.message);
-      const upserted = await upsertProjection(sql, rowId, ctx.views);
-      upsertCode = upserted.ok ? "unexpected-ok" : upserted.error.code;
-      throw new Error("roll back the poisoned canonical row");
-    });
-    expect(result.ok).toBe(false);
-    expect(upsertCode).toBe("PROJECTION_KEY_MISMATCH");
-    // Nothing survived anywhere — canonical, vd, or spidx.
-    const counts = await ctx.owner`
-      select
-        (select count(*) from fhir_resources where id = ${rowId}) as canonical,
-        (select count(*) from vd_patient_demographics where id in (${rowId}, ${divergentContentId})) as vd,
-        (select count(*) from spidx where resource_id = ${rowId}) as spidx`;
-    expect(counts[0]?.canonical).toBe("0");
-    expect(counts[0]?.vd).toBe("0");
-    expect(counts[0]?.spidx).toBe("0");
+      expectTypedErr(result, "PROJECTION_KEY_MISMATCH");
+      // Nothing was projected for either id.
+      const counts = await ctx.owner`
+        select
+          (select count(*) from vd_patient_demographics where id in (${rowId}, ${divergentContentId})) as vd,
+          (select count(*) from spidx where resource_id = ${rowId}) as spidx`;
+      expect(counts[0]?.vd).toBe("0");
+      expect(counts[0]?.spidx).toBe("0");
+    } finally {
+      await ctx.owner`delete from fhir_resources where id = ${rowId}`;
+    }
   });
 });
 

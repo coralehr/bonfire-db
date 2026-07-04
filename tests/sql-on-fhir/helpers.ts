@@ -5,6 +5,7 @@
  * write path, and never truncates shared tables outside the sanctioned
  * rebuild path. ALL data below is synthetic-only.
  */
+import { afterAll, beforeAll } from "bun:test";
 import { randomUUID } from "node:crypto";
 import type { Sql } from "postgres";
 import postgres from "postgres";
@@ -61,6 +62,23 @@ export function initContext(): TestContext {
 export async function closeContext(ctx: TestContext): Promise<void> {
   await ctx.owner.end({ timeout: 5 });
   await ctx.db.end();
+}
+
+/**
+ * Register the standard rebuilt-projections context lifecycle for a test
+ * file: init + full rebuild in beforeAll, teardown in afterAll. The assign
+ * callback receives the live context (files keep a plain `ctx` variable).
+ */
+export function registerRebuiltContext(assign: (ctx: TestContext) => void): void {
+  let ctx: TestContext | undefined;
+  beforeAll(async () => {
+    ctx = initContext();
+    await rebuildAll(ctx.owner, ctx.views);
+    assign(ctx);
+  });
+  afterAll(async () => {
+    if (ctx !== undefined) await closeContext(ctx);
+  });
 }
 
 function scribeViews(): MaterializableView[] {

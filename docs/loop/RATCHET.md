@@ -5,7 +5,7 @@
 > `loop ratchet` (and the test suite): if the guard artifact disappears,
 > the check fails and the bug is considered reopened.
 
-18 guarded · 8 open (debt owed a guard)
+22 guarded · 10 open (debt owed a guard)
 
 ## BP-001 — gate-crash-read-as-pass — GUARDED
 
@@ -213,4 +213,52 @@
 - Root cause: A behavioral invariant (no network on the write path) was guarded by a runtime spy on one API surface rather than a structural control over all of them.
 - Fix: ast-grep no-network-in-write-path bans fetch() calls and node:http/node:https/undici/axios/got imports under packages/core/src/{write,terminology}/** (tests exempt — they legitimately spy to prove the invariant). Terminology validation stays pure local SQL; RemoteTxValidator is a NotImplemented stub.
 - Guard: `ast-grep` → `sgrules/no-network-in-write-path.yml`
+- Recorded: 2026-07-04
+
+## BP-027 — conformance-headline-drift — GUARDED
+
+- Symptom: MANIFEST.shareableCases was parsed but never enforced: a regressed shareable case could be downgraded into declaredUnsupported and `bun run conformance` still exited 0 — CLI, CI gate, and the (tautological) headline unit assertion all stayed green while the claimed 133 quietly shrank.
+- Root cause: The exit rule only required failed==0 plus count consistency; nothing bound passed to the manifest's shareable pin, and the headline test derived its expectation from the report's own fields.
+- Fix: exitCodeForReport now requires passed==shareableCases, skippedDeclared==totalCases-shareableCases and total>0; the loader enforces manifest arithmetic (totalCases-declaredUnsupported==shareableCases); the headline test pins 133/11 as literals with a downgrade-attack negative control; the bf04-conformance-real eval recounts from raw bytes.
+- Guard: `test` → `packages/sql-on-fhir/src/conformance/conformance.test.ts::downgrading a failing case into declaredUnsupported still exits non-zero`
+- Recorded: 2026-07-04
+
+## BP-028 — projection-key-divergence — GUARDED
+
+- Symptom: A canonical row whose content.id diverged from its fhir_resources.id split the two projection writers: upsert deleted vd rows by content.id while addressing by row id (stranding stale rows under the old key), and rebuild projected what upsert refused — byte-parity between the writers broke.
+- Root cause: Nothing enforced content.id == id at write time; the typed write path satisfied it by construction, so the invariant was accidental, not structural.
+- Fix: insertFhirResourceTx/updateFhirResourceTx fail closed on a content.id mismatch (INVALID_FHIR_INPUT); both projection writers additionally refuse divergent rows with PROJECTION_KEY_MISMATCH (defense-in-depth below core, for owner-planted rows).
+- Guard: `test` → `packages/core/src/db/fhir-write.test.ts::insert with a divergent content.id is refused with zero rows written`
+- Recorded: 2026-07-04
+
+## BP-029 — rls-ratchet-name-dodge — GUARDED
+
+- Symptom: The 0004 projection-RLS event trigger string-matched object_identity: a quoted or mixed-case relname (public."VD_Evil") dodged stamping entirely, split_part kept the quotes and corrupted the policy lookup, and CREATE TABLE AS / SELECT INTO never fired it; the catalog sweep was case-sensitive and relkind='r' only.
+- Root cause: Identity STRING parsing instead of catalog resolution, plus an under-inclusive tag list. Owner-only surface (bonfire_app has no CREATE), but the belt-and-braces ratchet must not depend on polite DDL.
+- Fix: drizzle/0005 resolves relations via objid->pg_class with lower(relname) matching + relnamespace/relkind scoping and adds the CTAS/SELECT INTO tags; the catalog sweep went case-insensitive over relkind in ('r','p'); quoted-name and CTAS probes prove stamping live. Residual (accepted): ALTER TABLE RENAME/SET SCHEMA are uncovered tags — the sweep is the control there.
+- Guard: `test` → `tests/sql-on-fhir/rls-vd.test.ts::a QUOTED mixed-case vd table and a CTAS table are both stamped`
+- Recorded: 2026-07-04
+
+## BP-030 — conformance-trust-root-editable — GUARDED
+
+- Symptom: fixtures/sql-on-fhir/MANIFEST.json — the sha256/count/allowlist trust root behind the conformance claim — sat inside the slice's allowedPaths: a maker could re-pin bytes, grow the allowlist and shrink shareableCases in one edit, and every machine check would faithfully follow the NEW pins.
+- Root cause: The trust root lived on the same floor as the fixtures it pins; nothing distinguished pin-authoring (operator prep) from pin-consumption (maker).
+- Fix: fixtures/sql-on-fhir/MANIFEST.json added to GLOBAL_FORBIDDEN_PATHS — only operator prep (pre-base, human-reviewed) can re-pin; the floor entry is pinned in the allowed-paths test matrix.
+- Guard: `test` → `loop/src/contracts/allowed-paths.test.ts::fixtures/sql-on-fhir/MANIFEST.json`
+- Recorded: 2026-07-04
+
+## BP-031 — dist-dependent-lint-resolution — OPEN
+
+- Symptom: eslint was green locally but red in CI (18 no-unsafe-* errors in scripts/sql-on-fhir): package-name imports of @bonfire/core type-resolve via the exports map to dist/index.d.ts, which existed locally after any tsc -b but not in CI's no-build lint job, so the dependent type graph collapsed to error-typed.
+- Root cause: Consumer tsconfigs without project references get no source redirect for referenced composite packages; local build artifacts masked the hole (the green-local/red-fresh-CI class).
+- Fix: scripts/sql-on-fhir/tsconfig.json gained references to core + sql-on-fhir (TS project-service source redirect); reproduced first by wiping dist/ locally.
+- Planned guard: a wiped-dist eslint leg in the local verify battery (or a dedicated loop gate step); CI's no-build static/lint job remains the structural catch today
+- Recorded: 2026-07-04
+
+## BP-032 — comment-terminating-glob — OPEN
+
+- Symptom: Writing vd_*/spidx inside a /** block comment terminates the comment at the embedded */ and shreds the file into TS1434 parse errors — hit twice by the BF-04 maker and once by the operator in the close-out.
+- Root cause: The vd_* naming convention followed by a prose slash collides with the block-comment terminator; nothing lints comment bodies.
+- Fix: Rewrote the affected comments as vd_* + spidx; convention noted, no structural guard yet.
+- Planned guard: an sgrule/lint check flagging */ immediately followed by an identifier character inside block comments, or an ast-grep pattern on the parse error class
 - Recorded: 2026-07-04

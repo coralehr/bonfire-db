@@ -36,6 +36,13 @@
       "when": 1751760000000,
       "tag": "0004_sql_on_fhir",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1751846400000,
+      "tag": "0005_projection_rls_hardening",
+      "breakpoints": true
     }
   ]
 }

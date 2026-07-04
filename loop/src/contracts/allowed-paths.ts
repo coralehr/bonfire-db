@@ -52,7 +52,12 @@ export const GLOBAL_FORBIDDEN_PATHS: readonly string[] = [
   "sgconfig.yml",
   "sgrules/**",
   ".gitleaks.toml",
-  "tsconfig.base.json"
+  "tsconfig.base.json",
+  // The SQL-on-FHIR conformance TRUST ROOT (BP-030): the manifest pins the
+  // vendored suite bytes, the case counts, and the shareable pass floor. A
+  // maker who can edit it can downgrade regressed cases into the allowlist
+  // and keep the run green; only operator prep (pre-base) may re-pin it.
+  "fixtures/sql-on-fhir/MANIFEST.json"
 ];
 
 // `dot: true` so globs catch dotfiles (e.g. `.env`) and `**` matches hidden

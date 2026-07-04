@@ -110,16 +110,58 @@ describe("event-trigger ratchet (belt-and-braces for forgotten RLS)", () => {
       await ctx.owner`drop table if exists vd_evil_probe`;
     }
   });
+
+  test("a QUOTED mixed-case vd table and a CTAS table are both stamped (BP-029 name dodge)", async () => {
+    // The 0004 trigger string-matched object_identity, so public."VD_Probe"
+    // (quoted, mixed case) and CREATE TABLE AS never got stamped. 0005
+    // resolves via objid -> pg_class with lower(relname) matching and widened
+    // tags — both dodges must now be caught. Owner-only surface, but the
+    // ratchet must not depend on the DDL author being polite.
+    await ctx.owner`drop table if exists "VD_Probe"`;
+    await ctx.owner`drop table if exists vd_ctas_probe`;
+    try {
+      await ctx.owner`create table "VD_Probe" (id text, practice_id uuid not null)`;
+      const quoted = await ctx.owner`
+        select relrowsecurity, relforcerowsecurity from pg_class where relname = 'VD_Probe'`;
+      expect(quoted[0]?.relrowsecurity).toBe(true);
+      expect(quoted[0]?.relforcerowsecurity).toBe(true);
+      const quotedPolicies = await ctx.owner`
+        select policyname from pg_policies where tablename = 'VD_Probe'`;
+      expect(quotedPolicies.length).toBe(1);
+      await ctx.owner`create table vd_ctas_probe as select * from vd_patient_demographics limit 0`;
+      const ctas = await ctx.owner`
+        select relrowsecurity, relforcerowsecurity from pg_class where relname = 'vd_ctas_probe'`;
+      expect(ctas[0]?.relrowsecurity).toBe(true);
+      expect(ctas[0]?.relforcerowsecurity).toBe(true);
+    } finally {
+      await ctx.owner`drop table if exists "VD_Probe"`;
+      await ctx.owner`drop table if exists vd_ctas_probe`;
+    }
+  });
+
+  test("a projection table without practice_id cannot be created even with a quoted name", async () => {
+    await ctx.owner`drop table if exists "VD_NoPractice"`;
+    let rejected = false;
+    try {
+      await ctx.owner`create table "VD_NoPractice" (id text)`;
+      await ctx.owner`drop table "VD_NoPractice"`;
+    } catch (_cause) {
+      rejected = true;
+    }
+    expect(rejected).toBe(true);
+  });
 });
 
 describe("catalog invariant (MANDATORY structural control)", () => {
   test("every vd_%/spidx relation is ENABLE+FORCE RLS with exactly one safe_uuid policy for bonfire_app", async () => {
+    // Case-insensitive + partitioned-table-inclusive sweep (BP-029): a
+    // quoted/uppercase look-alike must not dodge the mandatory control.
     const relations = await ctx.owner`
       select c.relname, c.relrowsecurity, c.relforcerowsecurity
       from pg_class c
       join pg_namespace n on n.oid = c.relnamespace
-      where n.nspname = 'public' and c.relkind = 'r'
-        and (c.relname like 'vd\\_%' or c.relname like 'spidx%')`;
+      where n.nspname = 'public' and c.relkind in ('r', 'p')
+        and (lower(c.relname) like 'vd\\_%' or lower(c.relname) like 'spidx%')`;
     expect(relations.length).toBeGreaterThanOrEqual(9);
     for (const relation of relations) {
       expect(relation.relrowsecurity).toBe(true);

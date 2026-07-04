@@ -1,0 +1,4 @@
+{"id":"bf04-conformance-real","slice":"BF-04","traces":"BP-027 + BF-04 acceptance 1-2 (fake-conformance)","run":{"command":["bun","loop/src/evals/bf04-conformance-real.ts"]}}
+{"id":"bf04-skip-honesty","slice":"BF-04","traces":"BP-027 + BF-04 acceptance 2 (fake-conformance, artifact-vs-allowlist)","run":{"command":["bun","loop/src/evals/bf04-skip-honesty.ts"]}}
+{"id":"bf04-rls-cross-tenant","slice":"BF-04","traces":"BF-04 acceptance 6 (cross-tenant-leak, raw app-role probe)","run":{"command":["bun","loop/src/evals/bf04-rls-cross-tenant.ts"]}}
+{"id":"bf04-rebuild-determinism","slice":"BF-04","traces":"BF-04 acceptance 4 (rebuild purity, independent hash oracle)","run":{"command":["bun","loop/src/evals/bf04-rebuild-determinism.ts"]}}
