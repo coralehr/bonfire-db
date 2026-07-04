@@ -85,7 +85,9 @@ describe("the real KB", () => {
     "rls-guc-cast-error-channel",
     "jsonb-param-double-encode",
     "unique-constraint-existence-oracle",
-    "sql-gate-denylist-evasion"
+    "sql-gate-denylist-evasion",
+    "lossy-fhir",
+    "network-on-validate-write-path"
   ];
 
   test("loads, is strict-valid, never shrinks, and keeps the load-bearing classes", () => {

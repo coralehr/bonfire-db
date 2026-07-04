@@ -1,0 +1,28 @@
+# Behaviour tests for no-network-in-write-path. Run: bunx ast-grep test --skip-snapshot-tests
+# Path scoping (files/ignores) does not apply to inline cases — these prove the
+# PATTERNS; the write/terminology-only + test-exempt scoping lives in the rule.
+id: no-network-in-write-path
+valid:
+  - |
+    import { z } from "zod";
+  - |
+    import type { TenantSql } from "../db/tenant.js";
+  - |
+    const rows = await sql`select code from terminology_concept where system = ${system}`;
+  - |
+    function reject(): never { throw new Error("RemoteTxValidator not implemented"); }
+invalid:
+  - |
+    import http from "node:http";
+  - |
+    import https from "node:https";
+  - |
+    import { request } from "undici";
+  - |
+    import axios from "axios";
+  - |
+    import got from "got";
+  - |
+    const r = await fetch("https://tx.fhir.org/r4/CodeSystem/$validate-code");
+  - |
+    const mod = require("undici");

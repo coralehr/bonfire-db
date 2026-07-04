@@ -1,0 +1,76 @@
+# No network client in the validate-on-write path (ratchet BP-026).
+# The contract's hard invariant: validate-on-write NEVER makes a blocking
+# network call — terminology membership is pure local SQL, and the
+# RemoteTxValidator seam is a NotImplemented stub. A `fetch`/http-client import
+# under packages/core/src/{write,terminology} would silently reopen that
+# invariant. The BF-03 test only spied on globalThis.fetch (a partial proxy);
+# this is the structural control both panel reviewers asked for — a fetch or an
+# http/https/undici/axios/got import here is banned outright. Tests are exempt
+# (they legitimately spy on fetch to PROVE the invariant).
+id: no-network-in-write-path
+language: TypeScript
+severity: error
+message: Network client in the validate-on-write path — validate-on-write must never make a blocking network call.
+note: |
+  Terminology validation is pure local SQL set-membership; the RemoteTxValidator
+  is a NotImplemented stub, not an HTTP client. Do not import node:http,
+  node:https, undici, axios, or got, and do not call fetch(), under
+  packages/core/src/{write,terminology}. Query the bundled pack via SQL instead.
+metadata:
+  slop-pattern: network-on-write-path
+  gate-stage: 1
+  ratchet: BP-026
+files:
+  - "packages/core/src/write/**"
+  - "packages/core/src/terminology/**"
+ignores:
+  - "**/*.test.ts"
+rule:
+  any:
+    - pattern: import $$$X from "node:http"
+    - pattern: import $$$X from "node:https"
+    - pattern: import $$$X from "undici"
+    - pattern: import $$$X from "axios"
+    - pattern: import $$$X from "got"
+    - pattern: require("node:http")
+    - pattern: require("node:https")
+    - pattern: require("undici")
+    - pattern: require("axios")
+    - pattern: import("node:http")
+    - pattern: import("node:https")
+    - pattern: import("undici")
+    - pattern: fetch($$$ARGS)
+---
+id: no-network-in-write-path-tsx
+language: Tsx
+severity: error
+message: Network client in the validate-on-write path — validate-on-write must never make a blocking network call.
+note: |
+  Terminology validation is pure local SQL set-membership; the RemoteTxValidator
+  is a NotImplemented stub, not an HTTP client. Do not import node:http,
+  node:https, undici, axios, or got, and do not call fetch(), under
+  packages/core/src/{write,terminology}. Query the bundled pack via SQL instead.
+metadata:
+  slop-pattern: network-on-write-path
+  gate-stage: 1
+  ratchet: BP-026
+files:
+  - "packages/core/src/write/**"
+  - "packages/core/src/terminology/**"
+ignores:
+  - "**/*.test.ts"
+rule:
+  any:
+    - pattern: import $$$X from "node:http"
+    - pattern: import $$$X from "node:https"
+    - pattern: import $$$X from "undici"
+    - pattern: import $$$X from "axios"
+    - pattern: import $$$X from "got"
+    - pattern: require("node:http")
+    - pattern: require("node:https")
+    - pattern: require("undici")
+    - pattern: require("axios")
+    - pattern: import("node:http")
+    - pattern: import("node:https")
+    - pattern: import("undici")
+    - pattern: fetch($$$ARGS)
