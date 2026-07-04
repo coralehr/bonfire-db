@@ -1,0 +1,21 @@
+{
+  "name": "allergy_intolerance_summary",
+  "resource": "AllergyIntolerance",
+  "status": "active",
+  "description": "One row per AllergyIntolerance: key, clinical status code, primary code coding and patient reference.",
+  "select": [
+    {
+      "column": [
+        { "name": "id", "path": "getResourceKey()", "type": "id" },
+        {
+          "name": "clinical_status_code",
+          "path": "clinicalStatus.coding.first().code",
+          "type": "code"
+        },
+        { "name": "code_system", "path": "code.coding.first().system", "type": "uri" },
+        { "name": "code_code", "path": "code.coding.first().code", "type": "code" },
+        { "name": "patient_ref", "path": "patient.reference", "type": "string" }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,159 @@
+{
+  "source": {
+    "repo": "https://github.com/FHIR/sql-on-fhir.js",
+    "commit": "59953a4ff8d0bcceac368232ac8ae7454c53d5c8",
+    "license": "MIT (see UPSTREAM-LICENSE.md)",
+    "note": "tests/*.json + tests.schema.json + test-report.schema.json vendored VERBATIM (byte-stable; sha256 below). The upstream repo has no tags/releases; the commit SHA is the only pin."
+  },
+  "fhirpathVersion": "4.10.1",
+  "totalFiles": 22,
+  "totalCases": 144,
+  "shareableCases": 133,
+  "declaredUnsupported": [
+    {
+      "file": "fn_boundary.json",
+      "title": "decimal lowBoundary",
+      "reason": "lowBoundary()/highBoundary() are experimental FHIRPath additions (upstream-tagged experimental, outside the SQL-on-FHIR v2 shareable set); not implemented by the pinned fhirpath@4.10.1 stable surface. Deferred until the spec + library stabilize."
+    },
+    {
+      "file": "fn_boundary.json",
+      "title": "decimal highBoundary",
+      "reason": "lowBoundary()/highBoundary() are experimental FHIRPath additions (upstream-tagged experimental, outside the SQL-on-FHIR v2 shareable set); not implemented by the pinned fhirpath@4.10.1 stable surface. Deferred until the spec + library stabilize."
+    },
+    {
+      "file": "fn_boundary.json",
+      "title": "datetime lowBoundary",
+      "reason": "lowBoundary()/highBoundary() are experimental FHIRPath additions (upstream-tagged experimental, outside the SQL-on-FHIR v2 shareable set); not implemented by the pinned fhirpath@4.10.1 stable surface. Deferred until the spec + library stabilize."
+    },
+    {
+      "file": "fn_boundary.json",
+      "title": "datetime highBoundary",
+      "reason": "lowBoundary()/highBoundary() are experimental FHIRPath additions (upstream-tagged experimental, outside the SQL-on-FHIR v2 shareable set); not implemented by the pinned fhirpath@4.10.1 stable surface. Deferred until the spec + library stabilize."
+    },
+    {
+      "file": "fn_boundary.json",
+      "title": "date lowBoundary",
+      "reason": "lowBoundary()/highBoundary() are experimental FHIRPath additions (upstream-tagged experimental, outside the SQL-on-FHIR v2 shareable set); not implemented by the pinned fhirpath@4.10.1 stable surface. Deferred until the spec + library stabilize."
+    },
+    {
+      "file": "fn_boundary.json",
+      "title": "date highBoundary",
+      "reason": "lowBoundary()/highBoundary() are experimental FHIRPath additions (upstream-tagged experimental, outside the SQL-on-FHIR v2 shareable set); not implemented by the pinned fhirpath@4.10.1 stable surface. Deferred until the spec + library stabilize."
+    },
+    {
+      "file": "fn_boundary.json",
+      "title": "time lowBoundary",
+      "reason": "lowBoundary()/highBoundary() are experimental FHIRPath additions (upstream-tagged experimental, outside the SQL-on-FHIR v2 shareable set); not implemented by the pinned fhirpath@4.10.1 stable surface. Deferred until the spec + library stabilize."
+    },
+    {
+      "file": "fn_boundary.json",
+      "title": "time highBoundary",
+      "reason": "lowBoundary()/highBoundary() are experimental FHIRPath additions (upstream-tagged experimental, outside the SQL-on-FHIR v2 shareable set); not implemented by the pinned fhirpath@4.10.1 stable surface. Deferred until the spec + library stabilize."
+    },
+    {
+      "file": "fn_join.json",
+      "title": "join with comma",
+      "reason": "join() is upstream-tagged experimental (outside the shareable set). Deferred with the same honesty rule: declared, counted, never silently skipped."
+    },
+    {
+      "file": "fn_join.json",
+      "title": "join with empty value",
+      "reason": "join() is upstream-tagged experimental (outside the shareable set). Deferred with the same honesty rule: declared, counted, never silently skipped."
+    },
+    {
+      "file": "fn_join.json",
+      "title": "join with no value - default to no separator",
+      "reason": "join() is upstream-tagged experimental (outside the shareable set). Deferred with the same honesty rule: declared, counted, never silently skipped."
+    }
+  ],
+  "files": {
+    "basic.json": {
+      "sha256": "e958ab7797ed0b6852d30912fa243a2e979d2f9270624b617acc9b491c67d70f",
+      "cases": 11
+    },
+    "collection.json": {
+      "sha256": "aa5112b4ad91601f9a3bf6401519f3f9c552b6b6599e7863ed80cbba785f57b2",
+      "cases": 4
+    },
+    "combinations.json": {
+      "sha256": "b294967add17646194e9c3baeaf93e2ad5eadc3f3bbae4da6df61b728a3c209a",
+      "cases": 6
+    },
+    "constant.json": {
+      "sha256": "0c5b9cd5d63589707afa4366ba9a5b187c0c508cf971379c3a87ca5653bfa673",
+      "cases": 8
+    },
+    "constant_types.json": {
+      "sha256": "899820d1b03efd4c53509db1ea3ac9c0100985131f7738d0094bf8d5fd45ba70",
+      "cases": 14
+    },
+    "fhirpath.json": {
+      "sha256": "46f1e0c02c28875b95d53f3a32539bc0660aa2809c2b0bfe6ba72fd0a71dcdac",
+      "cases": 9
+    },
+    "fhirpath_numbers.json": {
+      "sha256": "50a8d14d3a3f9d2e6f18b496ef114edbde04c03c764a349a7e087e8f0217ffc4",
+      "cases": 1
+    },
+    "fn_boundary.json": {
+      "sha256": "53529f94f3e8b4f163685fe7114d3a16d1b8463a27b108f285f86bc08cfacbad",
+      "cases": 8
+    },
+    "fn_empty.json": {
+      "sha256": "fa4f95ea7c9b9d378a2bb2460145905d0f3d041884d5a7147186d860b404c663",
+      "cases": 1
+    },
+    "fn_extension.json": {
+      "sha256": "2dea7502369e5938f281e35d20928253f30978d3cdb99416957396325bce1826",
+      "cases": 2
+    },
+    "fn_first.json": {
+      "sha256": "b5af4cece8ababce1495eae706879b064a209863bbe75c431ddcb9de1517a735",
+      "cases": 2
+    },
+    "fn_join.json": {
+      "sha256": "d865b9aab1820f35ebd484921864bbcaa493dea4927e8c8ad88aac7da4f3ee7d",
+      "cases": 3
+    },
+    "fn_oftype.json": {
+      "sha256": "9b097bef6d9165ff48c0cd6d3421aaf97262dbbaa70903e13a2ba827e2e9585c",
+      "cases": 2
+    },
+    "fn_reference_keys.json": {
+      "sha256": "9b59356edaa560e8de49bd9cb75cca7812e666234c6a6783f4fb88b9d17dfae9",
+      "cases": 3
+    },
+    "foreach.json": {
+      "sha256": "84173ed33923c448941a204e5bdf25f94685eeeb1a3a535cb7e8354ef160921d",
+      "cases": 13
+    },
+    "logic.json": {
+      "sha256": "22df148d8dd2dac69337c39dc8c12aa6247b2d5d05197600afbcf7a4e3cdd82b",
+      "cases": 3
+    },
+    "repeat.json": {
+      "sha256": "538d4174eed881a4ba278aedd6bc255cb465a94f6e6c18cb7e65718d73162848",
+      "cases": 19
+    },
+    "row_index.json": {
+      "sha256": "187abf146c2e1c7251ee48066f33d21e4a0a14059b881f1059eedfe7f6eadd10",
+      "cases": 9
+    },
+    "union.json": {
+      "sha256": "e6c93718454f0be5fbf5295dc8255d4804a79784f6056156a031cdfb6f4bfd02",
+      "cases": 10
+    },
+    "validate.json": {
+      "sha256": "3bf8d204d6034342755ecd158c5f0a61dbe031a020cd5dd3e1d17f368b302aef",
+      "cases": 5
+    },
+    "view_resource.json": {
+      "sha256": "ddee9096314aeac07812351517b8dc3ff5715e1b98932cee692102ddf4d00477",
+      "cases": 3
+    },
+    "where.json": {
+      "sha256": "0e141e3355720f005511dce20c956ea5fec6ccfd54863ae13a23bd1bd09960b9",
+      "cases": 8
+    }
+  }
+}

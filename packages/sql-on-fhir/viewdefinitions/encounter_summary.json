@@ -1,0 +1,19 @@
+{
+  "name": "encounter_summary",
+  "resource": "Encounter",
+  "status": "active",
+  "description": "One row per Encounter: key, status, class coding, primary type coding and subject reference.",
+  "select": [
+    {
+      "column": [
+        { "name": "id", "path": "getResourceKey()", "type": "id" },
+        { "name": "status", "path": "status", "type": "code" },
+        { "name": "class_system", "path": "class.system", "type": "uri" },
+        { "name": "class_code", "path": "class.code", "type": "code" },
+        { "name": "type_system", "path": "type.first().coding.first().system", "type": "uri" },
+        { "name": "type_code", "path": "type.first().coding.first().code", "type": "code" },
+        { "name": "subject_ref", "path": "subject.reference", "type": "string" }
+      ]
+    }
+  ]
+}

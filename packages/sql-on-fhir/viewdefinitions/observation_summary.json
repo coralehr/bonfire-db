@@ -1,0 +1,25 @@
+{
+  "name": "observation_summary",
+  "resource": "Observation",
+  "status": "active",
+  "description": "One row per Observation: key, status, primary code coding, category, subject reference, effective time and value quantity (decimal preserved as text).",
+  "select": [
+    {
+      "column": [
+        { "name": "id", "path": "getResourceKey()", "type": "id" },
+        { "name": "status", "path": "status", "type": "code" },
+        { "name": "code_system", "path": "code.coding.first().system", "type": "uri" },
+        { "name": "code_code", "path": "code.coding.first().code", "type": "code" },
+        {
+          "name": "category_code",
+          "path": "category.first().coding.first().code",
+          "type": "code"
+        },
+        { "name": "subject_ref", "path": "subject.reference", "type": "string" },
+        { "name": "effective_date_time", "path": "effectiveDateTime", "type": "dateTime" },
+        { "name": "value_quantity_value", "path": "valueQuantity.value", "type": "decimal" },
+        { "name": "value_quantity_unit", "path": "valueQuantity.unit", "type": "string" }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "name": "@bonfire/sql-on-fhir",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "bun": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b --noEmit",
+    "lint": "eslint .",
+    "test": "bun test --pass-with-no-tests src ../../tests/sql-on-fhir",
+    "gate": "echo gated"
+  },
+  "dependencies": {
+    "@bonfire/core": "workspace:*",
+    "fhirpath": "4.10.1",
+    "postgres": "3.4.9",
+    "zod": "4.4.3"
+  }
+}

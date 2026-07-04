@@ -1,0 +1,31 @@
+{
+  "name": "condition_summary",
+  "resource": "Condition",
+  "status": "active",
+  "description": "One row per Condition: key, clinical/verification status codes, primary code coding, category and subject reference.",
+  "select": [
+    {
+      "column": [
+        { "name": "id", "path": "getResourceKey()", "type": "id" },
+        {
+          "name": "clinical_status_code",
+          "path": "clinicalStatus.coding.first().code",
+          "type": "code"
+        },
+        {
+          "name": "verification_status_code",
+          "path": "verificationStatus.coding.first().code",
+          "type": "code"
+        },
+        { "name": "code_system", "path": "code.coding.first().system", "type": "uri" },
+        { "name": "code_code", "path": "code.coding.first().code", "type": "code" },
+        {
+          "name": "category_code",
+          "path": "category.first().coding.first().code",
+          "type": "code"
+        },
+        { "name": "subject_ref", "path": "subject.reference", "type": "string" }
+      ]
+    }
+  ]
+}

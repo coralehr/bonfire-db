@@ -3,12 +3,14 @@
 # Stage 1 resolves the workspace with manifests only (layer-cacheable): EVERY
 # workspace manifest listed in the root package.json "workspaces" must be
 # present or `bun install --frozen-lockfile` fails with "Workspace not found".
-# loop/ and seed/ are copied for resolution only, their source never ships.
+# loop/, seed/ and packages/sql-on-fhir/ are copied for resolution only, their
+# source never ships.
 # (Guarded by docker-invariants.test.ts against a forgotten new-workspace COPY.)
 FROM oven/bun:1.3.14-slim AS deps
 WORKDIR /app
 COPY package.json bun.lock tsconfig.json tsconfig.base.json ./
 COPY packages/core/package.json packages/core/package.json
+COPY packages/sql-on-fhir/package.json packages/sql-on-fhir/package.json
 COPY apps/api/package.json apps/api/package.json
 COPY loop/package.json loop/package.json
 COPY seed/package.json seed/package.json
@@ -23,6 +25,7 @@ WORKDIR /app
 COPY --from=deps /app/node_modules node_modules
 COPY --from=deps /app/package.json /app/bun.lock /app/tsconfig.json /app/tsconfig.base.json ./
 COPY --from=deps /app/packages/core/package.json packages/core/package.json
+COPY --from=deps /app/packages/sql-on-fhir/package.json packages/sql-on-fhir/package.json
 COPY --from=deps /app/apps/api/package.json apps/api/package.json
 COPY --from=deps /app/loop/package.json loop/package.json
 COPY --from=deps /app/seed/package.json seed/package.json

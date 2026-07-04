@@ -1,0 +1,28 @@
+{
+  "name": "document_reference_summary",
+  "resource": "DocumentReference",
+  "status": "active",
+  "description": "One row per DocumentReference: key, status, type coding, category, subject reference, date and primary attachment URL.",
+  "select": [
+    {
+      "column": [
+        { "name": "id", "path": "getResourceKey()", "type": "id" },
+        { "name": "status", "path": "status", "type": "code" },
+        { "name": "type_system", "path": "type.coding.first().system", "type": "uri" },
+        { "name": "type_code", "path": "type.coding.first().code", "type": "code" },
+        {
+          "name": "category_code",
+          "path": "category.first().coding.first().code",
+          "type": "code"
+        },
+        { "name": "subject_ref", "path": "subject.reference", "type": "string" },
+        { "name": "doc_date", "path": "date", "type": "instant" },
+        {
+          "name": "content_url",
+          "path": "content.first().attachment.url",
+          "type": "url"
+        }
+      ]
+    }
+  ]
+}

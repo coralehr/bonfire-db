@@ -20,6 +20,8 @@
     "test": "turbo run test",
     "gate": "turbo run gate",
     "db:migrate": "bun run packages/core/src/db/migrate.ts",
+    "conformance": "bun run packages/sql-on-fhir/src/cli/conformance.ts",
+    "projections:rebuild": "bun run scripts/sql-on-fhir/rebuild.ts",
     "fhir:load-terminology": "bun run scripts/fhir/load-terminology.ts",
     "fhir:roundtrip": "bun run scripts/fhir/roundtrip.ts",
     "fhir:validate": "bun run scripts/fhir/validate.ts",

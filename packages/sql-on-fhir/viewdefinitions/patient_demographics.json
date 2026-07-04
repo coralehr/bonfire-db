@@ -1,0 +1,19 @@
+{
+  "name": "patient_demographics",
+  "resource": "Patient",
+  "status": "active",
+  "description": "One row per Patient: key, administrative gender, birth date, primary name and MRN identifier.",
+  "select": [
+    {
+      "column": [
+        { "name": "id", "path": "getResourceKey()", "type": "id" },
+        { "name": "gender", "path": "gender", "type": "code" },
+        { "name": "birth_date", "path": "birthDate", "type": "date" },
+        { "name": "family_name", "path": "name.first().family", "type": "string" },
+        { "name": "given_name", "path": "name.first().given.first()", "type": "string" },
+        { "name": "identifier_system", "path": "identifier.first().system", "type": "uri" },
+        { "name": "identifier_value", "path": "identifier.first().value", "type": "string" }
+      ]
+    }
+  ]
+}
