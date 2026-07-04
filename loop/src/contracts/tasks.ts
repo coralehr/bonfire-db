@@ -207,16 +207,34 @@ export const tasks: readonly SliceContract[] = [
     goal: "Build a SQL-on-FHIR v2 ViewDefinition runner in TypeScript over Postgres (using fhirpath.js) that materializes canonical FHIR resources into indexed typed vd_* projection tables plus a search-parameter index (spidx), so the agent/app read off <5ms typed projections instead of JSONB scans. Prove standards-credibility by passing the official HL7 sql-on-fhir conformance suite.",
     why: "Indexed typed projections are the performance primitive \u2014 the Medplum/HAPI model; Aidbox-style JSONB-direct search does not scale (target <5ms typed reads). Passing the published HL7 sql-on-fhir conformance suite is the standards-credible contributor magnet and the only honest basis for claiming SQL-on-FHIR support. The vd_* projections + spidx are the read surface every later slice (cited search BF-06, CCP BF-07, SDK BF-08, benchmark BF-11) is built on, so getting them rebuildable-from-canonical and RLS-fail-closed now is load-bearing.",
     dependsOn: ["BF-01", "BF-02", "BF-03"],
+    // Contract-drift reconcile (BF-04 operator prep, disclosed): the original
+    // entry listed pre-BF-02 paths that never came to exist. Dropped:
+    // packages/core/migrations/** and packages/core/src/schema/** (the real
+    // migration home is drizzle/**, already listed; the canonical store lives
+    // at packages/core/src/db/**, which stays OFF the floor). Added:
+    // scripts/sql-on-fhir/** for the owner-connection projections:rebuild
+    // entry stub (the no-raw-postgres-client rule bans `postgres` value
+    // imports in packages/** non-test files; precedent:
+    // scripts/fhir/load-terminology.ts) and package.json + bun.lock so
+    // dependency additions record their lockfile change (as BF-01/BF-03).
     allowedPaths: [
       "packages/sql-on-fhir/**",
-      "packages/core/migrations/**",
-      "packages/core/src/schema/**",
+      "scripts/sql-on-fhir/**",
       "fixtures/sql-on-fhir/**",
       "tests/sql-on-fhir/**",
       "docs/adr/**",
-      "drizzle/**"
+      "drizzle/**",
+      "package.json",
+      "bun.lock"
     ],
-    forbiddenPaths: ["packages/core/src/schema/fhir-resources.ts"],
+    // Reconciled with allowedPaths: the original banned a file that does not
+    // exist (packages/core/src/schema/fhir-resources.ts). The real canonical
+    // store + write path to protect are below; wiring upsertProjection into
+    // the write tx is a deferred, disclosed operator edit — never maker scope.
+    forbiddenPaths: [
+      "packages/core/src/db/fhir-store.ts",
+      "packages/core/src/write/write-resource.ts"
+    ],
     acceptance: [
       "The official HL7 sql-on-fhir v2 conformance suite is vendored under fixtures/sql-on-fhir/ with its upstream version/commit pinned and recorded; a `bun run conformance` task executes every case, prints total/passed/failed/skipped counts, and exits non-zero on any unexpected failure.",
       "The runner passes 100% of the conformance cases it claims to support; every intentionally unsupported case is in an explicit declared allowlist with a written reason (no silent skips) and the unsupported count is printed.",
@@ -232,6 +250,11 @@ export const tasks: readonly SliceContract[] = [
       "docker compose up -d db",
       "bun install --frozen-lockfile",
       "bun run db:migrate",
+      // Boot-order fix (reconcile addendum): vd_* tables are owner-rebuilt
+      // from canonical FHIR after migrate+seed, or every tests/sql-on-fhir
+      // read hits missing tables (the BP-024 class). Mirrors the CI boot.
+      "bun run seed",
+      "bun run projections:rebuild",
       "bun test packages/sql-on-fhir",
       "bun run conformance",
       "bun test tests/sql-on-fhir",

@@ -41,12 +41,12 @@ module.exports = {
       severity: "error",
       comment:
         "The loop harness (loop/**) is a separate codebase. It may import loop/** only — never " +
-        "the product or its glue (packages/**, apps/**, drizzle/**, seed/**, scripts/**). The " +
-        "harness runs the product as an external subprocess; it does not link against it. See " +
-        "docs/plans/loop-harness-plan.md section 2.",
+        "the product or its glue (packages/**, apps/**, drizzle/**, seed/**, scripts/**, " +
+        "tests/**). The harness runs the product as an external subprocess; it does not link " +
+        "against it. See docs/plans/loop-harness-plan.md section 2.",
       from: { path: "^loop/" },
       to: {
-        path: "^(packages|apps|drizzle|seed|scripts)/",
+        path: "^(packages|apps|drizzle|seed|scripts|tests)/",
         // Self-edges within loop/** are the whole point and are always allowed.
         pathNot: "^loop/"
       }
@@ -56,9 +56,9 @@ module.exports = {
       severity: "error",
       comment:
         "The product and its workspace glue (packages/**, apps/**, drizzle/**, seed/**, " +
-        "scripts/**) must never import the loop harness (loop/**). Shipping code is fully " +
-        "independent of the tooling that builds it.",
-      from: { path: "^(packages|apps|drizzle|seed|scripts)/" },
+        "scripts/**, tests/**) must never import the loop harness (loop/**). Shipping code is " +
+        "fully independent of the tooling that builds it.",
+      from: { path: "^(packages|apps|drizzle|seed|scripts|tests)/" },
       to: { path: "^loop/" }
     },
 
@@ -125,10 +125,10 @@ module.exports = {
       name: "consumers-use-package-entry-points",
       severity: "error",
       comment:
-        "Apps and workspace glue (drizzle/seed/scripts) must import @bonfire/* packages through " +
-        "their public entry point (packages/<name>/src/index.ts) only — no deep imports into " +
-        "src/ internals.",
-      from: { path: "^(apps|drizzle|seed|scripts)/" },
+        "Apps and workspace glue (drizzle/seed/scripts/tests) must import @bonfire/* packages " +
+        "through their public entry point (packages/<name>/src/index.ts) only — no deep imports " +
+        "into src/ internals.",
+      from: { path: "^(apps|drizzle|seed|scripts|tests)/" },
       to: {
         path: "^packages/[^/]+/src/",
         pathNot: "^packages/[^/]+/src/index\\.ts$"
@@ -187,7 +187,7 @@ module.exports = {
      * caches never carry meaningful boundary information.
      */
     doNotFollow: { path: "node_modules" },
-    includeOnly: "^(apps|packages|loop|drizzle|seed|scripts)/",
+    includeOnly: "^(apps|packages|loop|drizzle|seed|scripts|tests)/",
     exclude: { path: "(^|/)(dist|build|coverage|\\.cache|node_modules)/" },
 
     /**

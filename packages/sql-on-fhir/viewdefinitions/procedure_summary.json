@@ -1,0 +1,18 @@
+{
+  "name": "procedure_summary",
+  "resource": "Procedure",
+  "status": "active",
+  "description": "One row per Procedure: key, status, primary code coding, subject reference and performed time.",
+  "select": [
+    {
+      "column": [
+        { "name": "id", "path": "getResourceKey()", "type": "id" },
+        { "name": "status", "path": "status", "type": "code" },
+        { "name": "code_system", "path": "code.coding.first().system", "type": "uri" },
+        { "name": "code_code", "path": "code.coding.first().code", "type": "code" },
+        { "name": "subject_ref", "path": "subject.reference", "type": "string" },
+        { "name": "performed_date_time", "path": "performedDateTime", "type": "dateTime" }
+      ]
+    }
+  ]
+}

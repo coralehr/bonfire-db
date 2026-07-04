@@ -18,6 +18,10 @@
       "entry": ["src/index.ts", "src/**/*.test.ts"],
       "project": ["src/**/*.ts"]
     },
+    "packages/sql-on-fhir": {
+      "entry": ["src/index.ts", "src/cli/**/*.ts", "src/**/*.test.ts"],
+      "project": ["src/**/*.ts"]
+    },
     "apps/api": {
       "entry": ["src/server.ts", "src/**/*.test.ts"],
       "project": ["src/**/*.ts"]
@@ -27,8 +31,16 @@
       "project": ["**/*.ts"]
     },
     ".": {
-      "entry": ["scripts/synthetic-scan/index.ts"],
-      "project": ["scripts/synthetic-scan/**/*.ts"]
+      "entry": [
+        "scripts/synthetic-scan/index.ts",
+        "scripts/sql-on-fhir/**/*.ts",
+        "tests/sql-on-fhir/**/*.test.ts"
+      ],
+      "project": [
+        "scripts/synthetic-scan/**/*.ts",
+        "scripts/sql-on-fhir/**/*.ts",
+        "tests/sql-on-fhir/**/*.ts"
+      ]
     }
   }
 }

@@ -66,7 +66,7 @@ jobs:
               ;;
             boundaries)
               DIRS=""
-              for d in loop packages apps drizzle seed scripts; do
+              for d in loop packages apps drizzle seed scripts tests; do
                 [ -d "$d" ] && DIRS="$DIRS $d"
               done
               if [ -z "$DIRS" ]; then
@@ -78,7 +78,7 @@ jobs:
             suppressions)
               # No inline semgrep suppressions in source (the bypass eslint's
               # noInlineConfig + ban-ts-comment already close for eslint/tsc).
-              if grep -rn 'nosemgrep' --include='*.ts' --include='*.tsx' --include='*.mts' --include='*.cts' loop packages apps 2>/dev/null; then
+              if grep -rn 'nosemgrep' --include='*.ts' --include='*.tsx' --include='*.mts' --include='*.cts' loop packages apps tests scripts seed 2>/dev/null; then
                 echo "inline // nosemgrep suppressions are forbidden"
                 exit 1
               fi
@@ -154,6 +154,10 @@ jobs:
             bun run db:migrate
             if [ -f seed/index.ts ]; then bun run seed; fi
             if [ -f scripts/fhir/load-terminology.ts ]; then bun run fhir:load-terminology; fi
+            # BF-04: vd_* projections are owner-rebuilt from canonical FHIR
+            # AFTER migrate+seed or every tests/sql-on-fhir read hits missing
+            # tables (the BP-024 boot-order class).
+            if [ -f scripts/sql-on-fhir/rebuild.ts ]; then bun run projections:rebuild; fi
           else
             echo "no docker-compose.yml yet; nothing to boot"
           fi
@@ -193,6 +197,15 @@ jobs:
         run: |
           set -euo pipefail
           if [ -f scripts/fhir/validate.ts ]; then bun run fhir:validate; fi
+      # BF-04: SQL-on-FHIR v2 conformance over the vendored, sha256-pinned HL7
+      # suite (fixtures/sql-on-fhir). Feature-guarded like the BF-03 legs but
+      # fail-closed once the runner exists: any non-allowlisted failure, hash
+      # mismatch vs MANIFEST.json, or case-count drift exits non-zero.
+      - name: SQL-on-FHIR conformance (vendored HL7 suite)
+        if: matrix.task == 'test'
+        run: |
+          set -euo pipefail
+          if [ -f packages/sql-on-fhir/src/cli/conformance.ts ]; then bun run conformance; fi
       - name: Tear down product stack
         if: always() && matrix.task == 'test'
         run: |

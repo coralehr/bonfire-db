@@ -29,6 +29,13 @@
       "when": 1751673600000,
       "tag": "0003_terminology",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1751760000000,
+      "tag": "0004_sql_on_fhir",
+      "breakpoints": true
     }
   ]
 }

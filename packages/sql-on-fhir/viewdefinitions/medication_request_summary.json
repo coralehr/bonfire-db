@@ -1,0 +1,28 @@
+{
+  "name": "medication_request_summary",
+  "resource": "MedicationRequest",
+  "status": "active",
+  "description": "One row per MedicationRequest: key, status, intent, medication coding, subject/requester references and authored time.",
+  "select": [
+    {
+      "column": [
+        { "name": "id", "path": "getResourceKey()", "type": "id" },
+        { "name": "status", "path": "status", "type": "code" },
+        { "name": "intent", "path": "intent", "type": "code" },
+        {
+          "name": "medication_system",
+          "path": "medicationCodeableConcept.coding.first().system",
+          "type": "uri"
+        },
+        {
+          "name": "medication_code",
+          "path": "medicationCodeableConcept.coding.first().code",
+          "type": "code"
+        },
+        { "name": "subject_ref", "path": "subject.reference", "type": "string" },
+        { "name": "requester_ref", "path": "requester.reference", "type": "string" },
+        { "name": "authored_on", "path": "authoredOn", "type": "dateTime" }
+      ]
+    }
+  ]
+}

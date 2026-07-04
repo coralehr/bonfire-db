@@ -14,7 +14,7 @@
  *            locally (cached image), red only on a fresh CI build.
  */
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const repoRoot = join(import.meta.dir, "..", "..", "..");
@@ -24,14 +24,24 @@ const rootPkg = JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8"))
   workspaces?: string[];
 };
 
-/** Concrete workspace directories from the root globs (globs expanded once). */
+/**
+ * Concrete workspace directories from the root globs. Glob patterns
+ * (`packages/*`) are expanded against the real filesystem: `bun install
+ * --frozen-lockfile` needs EVERY member's manifest present in the image, so a
+ * glob-added workspace (the BF-04 `packages/sql-on-fhir` case) must be caught
+ * exactly like a literally-listed one — skipping globs re-opened BP-023.
+ */
 function workspaceDirs(): string[] {
   const dirs: string[] = [];
   for (const pattern of rootPkg.workspaces ?? []) {
     if (pattern.endsWith("/*")) {
-      // packages/* -> the api image only depends on packages/core today; the
-      // Dockerfile COPYs the specific member, so assert that member is present
-      // rather than every future sibling. Skip glob patterns here.
+      const parent = pattern.slice(0, -"/*".length);
+      for (const entry of readdirSync(join(repoRoot, parent), { withFileTypes: true })) {
+        if (!entry.isDirectory()) continue;
+        if (existsSync(join(repoRoot, parent, entry.name, "package.json"))) {
+          dirs.push(`${parent}/${entry.name}`);
+        }
+      }
       continue;
     }
     dirs.push(pattern);
@@ -92,7 +102,7 @@ describe("api image install", () => {
     }
   });
 
-  test("every non-glob root workspace manifest is COPYed for install (BP-023)", () => {
+  test("every root workspace manifest (globs expanded) is COPYed for install (BP-023)", () => {
     const missing = workspaceDirs().filter(
       (dir) => !apiDockerfile.includes(`COPY ${dir}/package.json ${dir}/package.json`)
     );

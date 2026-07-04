@@ -188,7 +188,7 @@
 - Symptom: Adding `seed` to the root package.json workspaces broke the api Docker build: `bun install --frozen-lockfile --production` failed with 'Workspace not found seed' because docker/api.Dockerfile COPYs workspace manifests by explicit list. Invisible locally (docker compose reused a cached image); red only on a fresh CI build.
 - Root cause: The Dockerfile enumerates each workspace manifest to COPY, so a newly-declared workspace whose manifest is not added is absent when bun resolves the workspace graph — and local compose runs don't rebuild the image, hiding it.
 - Fix: COPY seed/package.json in both the deps and runtime stages (mirroring loop/); full `docker build` reproduced the failure and confirmed the fix. The docker-invariants test now asserts every non-glob root workspace has a matching COPY in the Dockerfile.
-- Guard: `test` → `loop/src/gates/docker-invariants.test.ts::every non-glob root workspace manifest is COPYed for install`
+- Guard: `test` → `loop/src/gates/docker-invariants.test.ts::every root workspace manifest (globs expanded) is COPYed for install`
 - Recorded: 2026-07-03
 
 ## BP-024 — db-test-depends-on-unrun-boot-step — OPEN
