@@ -8,7 +8,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
 import { insertFhirResourceTx } from "../../packages/core/src/index.js";
-import { upsertProjection } from "../../packages/sql-on-fhir/src/index.js";
+import { rebuildProjections, upsertProjection } from "../../packages/sql-on-fhir/src/index.js";
 import type { TestContext } from "./helpers.js";
 import {
   allTableHashes,
@@ -103,6 +103,30 @@ describe("rolled-back write leaves ZERO rows anywhere", () => {
     expect(counts[0]?.canonical).toBe("0");
     expect(counts[0]?.vd).toBe("0");
     expect(counts[0]?.spidx).toBe("0");
+  });
+});
+
+describe("rebuild refuses a divergent canonical row (key mismatch, owner side)", () => {
+  test("a content.id that diverges from its row id fails the whole rebuild, zero writes", async () => {
+    // The tenant write path can no longer create such a row (upsert refuses),
+    // so plant it as the owner — the rebuild guard must fail closed on its
+    // own, not rely on the upsert-side guard having run.
+    const rowId = randomUUID();
+    const practice = randomUUID();
+    const divergent = { resourceType: "Patient", id: randomUUID(), active: true };
+    await ctx.owner`
+      insert into fhir_resources (id, type, practice_id, version_id, last_updated, content)
+      values (${rowId}, 'Patient', ${practice}, 1, now(), ${ctx.owner.json(divergent)})`;
+    try {
+      const result = await rebuildProjections(ctx.owner, ctx.views);
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.error.code).toBe("PROJECTION_KEY_MISMATCH");
+      // The failed rebuild rolled back: existing vd rows are still intact.
+      const vd = await ctx.owner`select count(*)::int as n from vd_patient_demographics`;
+      expect(Number(vd[0]?.n)).toBeGreaterThan(0);
+    } finally {
+      await ctx.owner`delete from fhir_resources where id = ${rowId}`;
+    }
   });
 });
 
