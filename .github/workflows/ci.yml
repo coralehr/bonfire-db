@@ -105,21 +105,55 @@ jobs:
         with:
           bun-version: "1.3.14"
       - run: bun install --frozen-lockfile
+      # BF-03 conformance leg needs the official HL7 FHIR validator (Java).
+      # Temurin is pre-cached on ubuntu-latest (near-instant); the jar is pinned
+      # by version + sha256 (mirrors the gitleaks install), and the ~/.fhir IG
+      # closure is cached across runs. Only the test task touches FHIR.
+      - name: Set up Java (HL7 FHIR validator)
+        if: matrix.task == 'test'
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Cache FHIR validator jar + IG closure
+        if: matrix.task == 'test'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.fhir
+            .fhir-cache
+          key: fhir-validator-6.9.11-uscore-6.1.0
+      - name: Install HL7 FHIR validator (pinned + checksum-verified)
+        if: matrix.task == 'test'
+        run: |
+          set -euo pipefail
+          VALIDATOR_VERSION="6.9.11"
+          VALIDATOR_SHA256="5b87e3f8d28c3ec22d1db710d2570a00eb0c763ac9cdca61152f971b8db2fabc"
+          JAR="$PWD/.fhir-cache/validator_cli.jar"
+          mkdir -p .fhir-cache
+          if [ ! -f "$JAR" ]; then
+            curl -sSfL \
+              "https://github.com/hapifhir/org.hl7.fhir.core/releases/download/${VALIDATOR_VERSION}/validator_cli.jar" \
+              -o "$JAR"
+          fi
+          echo "${VALIDATOR_SHA256}  ${JAR}" | sha256sum -c -
+          echo "BONFIRE_FHIR_VALIDATOR_JAR=${JAR}" >> "$GITHUB_ENV"
       # DB-backed product tests need the real stack. Boots only when the repo
       # ships a compose file (post-BF-01); the guard keeps pre-product branches
       # green. If compose exists, boot MUST succeed — no fail-open skip.
       - name: Boot product stack (DB-backed tests)
         if: matrix.task == 'test'
-        # Mirrors the slice verify[] boot order: migrate then seed, so
-        # DB-backed tests (e.g. the seeded-state contract) run against the
-        # same synthetic state the contract establishes. The seed is
-        # idempotent and only runs once the seeder exists.
+        # Mirrors the slice verify[] boot order: migrate, seed, then load the
+        # terminology reference packs, so DB-backed tests run against the same
+        # state the contract establishes. Each step runs only once its script
+        # exists (feature-level guard); once present it is fail-closed.
         run: |
           set -euo pipefail
           if [ -f docker-compose.yml ]; then
             docker compose up -d --wait
             bun run db:migrate
             if [ -f seed/index.ts ]; then bun run seed; fi
+            if [ -f scripts/fhir/load-terminology.ts ]; then bun run fhir:load-terminology; fi
           else
             echo "no docker-compose.yml yet; nothing to boot"
           fi
@@ -145,6 +179,20 @@ jobs:
         # Unconditional: deleting the scanner must be a RED check, never an
         # echo-and-pass (the synthetic-scan-wiring pin test also guards this).
         run: bun run scan:synthetic
+      # BF-03 conformance + losslessness gates. Feature-guarded (skip cleanly on
+      # pre-BF-03 branches) but fail-closed once the scripts exist: the scripts
+      # exit non-zero if a golden fails the HL7 validator, a round-trip drifts
+      # without a loss-ledger entry, or java/jar/cache is absent — never a skip.
+      - name: FHIR round-trip (lossless-or-ledgered)
+        if: matrix.task == 'test'
+        run: |
+          set -euo pipefail
+          if [ -f scripts/fhir/roundtrip.ts ]; then bun run fhir:roundtrip; fi
+      - name: FHIR conformance (HL7 validator, US Core 6.1.0)
+        if: matrix.task == 'test'
+        run: |
+          set -euo pipefail
+          if [ -f scripts/fhir/validate.ts ]; then bun run fhir:validate; fi
       - name: Tear down product stack
         if: always() && matrix.task == 'test'
         run: |

@@ -153,6 +153,9 @@ export const tasks: readonly SliceContract[] = [
       "fixtures/terminology/**",
       "scripts/fhir/**",
       "package.json",
+      // Dependency additions (allowed via package.json) must record their
+      // lockfile change (lockfile gate) — as BF-01/BF-02 already do.
+      "bun.lock",
       "docs/adr/**",
       "docs/loss-ledger.md"
     ],

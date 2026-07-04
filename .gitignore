@@ -58,6 +58,9 @@ id_rsa*
 # scan:synthetic sweeps it every run); the blanket *.ndjson ignore above must
 # not swallow it — that hid the files from CI while they existed locally.
 !fixtures/synthetic/**/*.ndjson
+# Committed license-clean terminology reference packs (public-domain vocab,
+# not PHI); the blanket *.csv ignore above must not swallow them (cf BP-025).
+!fixtures/terminology/**/*.csv
 !seed/**/*.sql
 
 # Other credential files
@@ -67,3 +70,6 @@ secrets.*
 
 # Serena MCP local project cache
 .serena/
+
+# HL7 FHIR validator jar + IG closure (build-time tool cache, like node_modules)
+.fhir-cache/

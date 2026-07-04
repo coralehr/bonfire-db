@@ -1,0 +1,21 @@
+{
+  "resourceType": "Patient",
+  "id": "11111111-1111-4111-8111-111111111111",
+  "identifier": [
+    {
+      "system": "http://myhospital.org/mrn",
+      "value": "MRN-000123"
+    }
+  ],
+  "name": [
+    {
+      "family": "Testperson",
+      "given": ["Ada", "Q"]
+    }
+  ],
+  "gender": "female",
+  "birthDate": "1985-04-12",
+  "meta": {
+    "profile": ["http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient"]
+  }
+}

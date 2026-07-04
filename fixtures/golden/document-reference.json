@@ -1,0 +1,43 @@
+{
+  "resourceType": "DocumentReference",
+  "id": "88888888-8888-4888-8888-888888888888",
+  "status": "current",
+  "type": {
+    "coding": [
+      {
+        "system": "http://loinc.org",
+        "code": "34133-9",
+        "display": "Summarization of episode note"
+      }
+    ]
+  },
+  "category": [
+    {
+      "coding": [
+        {
+          "system": "http://hl7.org/fhir/us/core/CodeSystem/us-core-documentreference-category",
+          "code": "clinical-note"
+        }
+      ]
+    }
+  ],
+  "subject": {
+    "reference": "Patient/11111111-1111-4111-8111-111111111111"
+  },
+  "content": [
+    {
+      "attachment": {
+        "contentType": "text/plain",
+        "url": "https://bonfire.test/docs/note-001.txt"
+      },
+      "format": {
+        "system": "http://ihe.net/fhir/ValueSet/IHE.FormatCode.codesystem",
+        "code": "urn:ihe:iti:xds:2017:mimeTypeSufficient"
+      }
+    }
+  ],
+  "date": "2024-01-15T12:00:00Z",
+  "meta": {
+    "profile": ["http://hl7.org/fhir/us/core/StructureDefinition/us-core-documentreference"]
+  }
+}

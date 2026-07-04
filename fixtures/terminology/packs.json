@@ -1,0 +1,12 @@
+{
+  "packs": [
+    {
+      "name": "icd10cm",
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2026",
+      "file": "icd10cm-sample.csv",
+      "source_url": "https://www.cdc.gov/nchs/icd/icd-10-cm/files.html",
+      "license": "public-domain (CMS/NCHS)"
+    }
+  ]
+}
