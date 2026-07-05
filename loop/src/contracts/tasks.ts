@@ -424,7 +424,9 @@ export const tasks: readonly SliceContract[] = [
       "Building a CCP from a result set scoped to practice A never materializes a span that resolves to another practice_id's resource (default-deny / empty), and the projection performs no canonical-FHIR read outside the policy-scoped set passed from BF-06 (no scope-after-retrieve, no cross-tenant leak) \u2014 proven by a negative test.",
       "`bun run gate` passes with zero `any`, no `@ts-ignore`/`eslint-disable`, exhaustive switches, explicit return types on exports, and the allowed-paths diff check green (no files touched outside allowedPaths)."
     ],
-    verify: ["bun run gate", "bun test packages/core/src/ccp", "loop eval --slice BF-07"],
+    // Registry hygiene (BF-04 close-out): the bare `loop` binary does not
+    // exist on PATH — every verify chain invokes it via the root script.
+    verify: ["bun run gate", "bun test packages/core/src/ccp", "bun run loop eval --slice BF-07"],
     evals: [
       "bf-07-citation-resolves: for every span in a built CCP, (resourceId, jsonPath) resolves against the canonical fhir_resources row and the projected value equals the resolved value (citation precision = 1.0 on the golden set).",
       "bf-07-audit-hash-binds: every CCP span's auditHash equals the row_hash of the corresponding hash-chained audit entry; a mutated source value or audit row is detected as a hash mismatch.",
@@ -546,7 +548,7 @@ export const tasks: readonly SliceContract[] = [
       "bun test apps/api",
       "bun run typecheck",
       "bun run gate",
-      "loop eval --slice BF-09"
+      "bun run loop eval --slice BF-09"
     ],
     evals: [
       "propose-only-broken/agent-cannot-approve: an agent actor calling approve or commit is DENIED (default-deny); fails if the agent can transition a proposal to approved or committed.",

@@ -10,11 +10,7 @@
  * loop workspace's build graph) rather than importing them.
  */
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-
-const repoRoot = join(import.meta.dir, "..", "..", "..");
-const read = (rel: string): string => readFileSync(join(repoRoot, rel), "utf8");
+import { readRepoFile as read } from "./wiring.js";
 
 const CANONICAL_RULES = [
   "name-marker",

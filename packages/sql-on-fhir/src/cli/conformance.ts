@@ -11,7 +11,11 @@ import { exitCodeForReport, writeReport } from "../conformance/report.js";
 import { runSuite } from "../conformance/runner.js";
 
 const PACKAGE_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const SUITE_DIR = join(PACKAGE_DIR, "..", "..", "fixtures", "sql-on-fhir");
+// SQL_ON_FHIR_SUITE_DIR override: the harness mutation-canary eval points the
+// CLI at a deliberately tampered COPY of the suite and requires a red run — a
+// runner that echoes the manifest instead of evaluating views cannot pass it.
+const SUITE_DIR =
+  process.env.SQL_ON_FHIR_SUITE_DIR ?? join(PACKAGE_DIR, "..", "..", "fixtures", "sql-on-fhir");
 const REPORT_PATH = join(PACKAGE_DIR, "test_report.json");
 
 function main(): number {

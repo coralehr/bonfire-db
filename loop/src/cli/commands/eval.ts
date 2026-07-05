@@ -53,6 +53,13 @@ export function runEvalCommand(io: CliIO, args: readonly string[]): number {
   }
 
   const cases = values.slice ? corpus.value.filter((c) => c.slice === values.slice) : corpus.value;
+  if (values.slice !== undefined && cases.length === 0) {
+    // Fail-closed: an empty slice filter means the corpus rows a verify[]
+    // chain expects DO NOT EXIST — exiting 0 here would let a slice pass its
+    // eval step having shipped no evals (the BP-021 fail-open class).
+    io.stderr(`loop eval: no eval cases for slice ${values.slice} — the corpus owes them\n`);
+    return ExitCode.FAILURE;
+  }
   const report = runGates(makeEvalGates(cases), makeGateContext(repoRoot), {
     strict: values.strict
   });

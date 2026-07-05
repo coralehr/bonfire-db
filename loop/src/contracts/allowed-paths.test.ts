@@ -56,7 +56,8 @@ describe("checkAllowedPaths — global forbidden floor (structural default-deny)
     "tsconfig.base.json",
     ".env",
     ".env.local",
-    ".envrc"
+    ".envrc",
+    "fixtures/sql-on-fhir/MANIFEST.json"
   ];
   for (const file of floorHits) {
     test(`floor forbids ${file} even under allow '**'`, () => {

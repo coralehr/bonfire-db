@@ -109,3 +109,13 @@ describe("render", () => {
     expect(json.blockingFailures).toEqual(["lint"]);
   });
 });
+
+describe("eval — empty slice filter fails closed", () => {
+  test("a slice with zero corpus cases exits 1, never a vacuous pass", () => {
+    // BF-13 exists in the registry but owes its eval rows; a verify[] chain
+    // running `loop eval --slice BF-13` must go red, not green-on-nothing.
+    const { io, err } = fakeIO();
+    expect(main(["eval", "--slice", "BF-13"], io)).toBe(ExitCode.FAILURE);
+    expect(err()).toContain("no eval cases for slice BF-13");
+  });
+});

@@ -11,6 +11,10 @@
 #   - apps/api/src/app.ts        the /health catalog probe's non-tenant pool
 #   - seed/**, scripts/**        operator-run dev surfaces, not the product
 #   - tests                      isolation proofs deliberately step around it
+#   - loop/src/evals/**          Stage-2 execution evals probe the LIVE stack
+#                                as raw TCP clients ON PURPOSE (independent of
+#                                product wiring, so a product-client bug cannot
+#                                vouch for a policy bug)
 id: no-raw-postgres-client
 language: TypeScript
 severity: error
@@ -31,6 +35,7 @@ files:
 ignores:
   - "packages/core/src/db/**"
   - "apps/api/src/app.ts"
+  - "loop/src/evals/**"
   - "**/*.test.ts"
   - "**/*.test.tsx"
 rule:
@@ -61,6 +66,7 @@ files:
 ignores:
   - "packages/core/src/db/**"
   - "apps/api/src/app.ts"
+  - "loop/src/evals/**"
   - "**/*.test.ts"
   - "**/*.test.tsx"
 rule:

@@ -93,6 +93,9 @@ jobs:
   build-test:
     name: build-test / ${{ matrix.task }}
     runs-on: ubuntu-latest
+    # A wedged DB or hung eval must fail this required check quickly, not
+    # stall it until GitHub's 360-minute default kill.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -143,24 +146,18 @@ jobs:
       # green. If compose exists, boot MUST succeed — no fail-open skip.
       - name: Boot product stack (DB-backed tests)
         if: matrix.task == 'test'
-        # Mirrors the slice verify[] boot order: migrate, seed, then load the
-        # terminology reference packs, so DB-backed tests run against the same
-        # state the contract establishes. Each step runs only once its script
-        # exists (feature-level guard); once present it is fail-closed.
+        # Mirrors the slice verify[] boot order: migrate, seed, terminology,
+        # then rebuild projections. UNCONDITIONAL since the BF-04 close-out:
+        # every script exists on main, and a file-existence guard is fail-open
+        # on deletion (the BP-021 class — deleting a step's file must be a RED
+        # check, never a silent skip). Pinned by conformance-wiring.test.ts.
         run: |
           set -euo pipefail
-          if [ -f docker-compose.yml ]; then
-            docker compose up -d --wait
-            bun run db:migrate
-            if [ -f seed/index.ts ]; then bun run seed; fi
-            if [ -f scripts/fhir/load-terminology.ts ]; then bun run fhir:load-terminology; fi
-            # BF-04: vd_* projections are owner-rebuilt from canonical FHIR
-            # AFTER migrate+seed or every tests/sql-on-fhir read hits missing
-            # tables (the BP-024 boot-order class).
-            if [ -f scripts/sql-on-fhir/rebuild.ts ]; then bun run projections:rebuild; fi
-          else
-            echo "no docker-compose.yml yet; nothing to boot"
-          fi
+          docker compose up -d --wait
+          bun run db:migrate
+          bun run seed
+          bun run fhir:load-terminology
+          bun run projections:rebuild
       - name: turbo ${{ matrix.task }} (affected)
         env:
           TASK: ${{ matrix.task }}
@@ -183,29 +180,30 @@ jobs:
         # Unconditional: deleting the scanner must be a RED check, never an
         # echo-and-pass (the synthetic-scan-wiring pin test also guards this).
         run: bun run scan:synthetic
-      # BF-03 conformance + losslessness gates. Feature-guarded (skip cleanly on
-      # pre-BF-03 branches) but fail-closed once the scripts exist: the scripts
-      # exit non-zero if a golden fails the HL7 validator, a round-trip drifts
-      # without a loss-ledger entry, or java/jar/cache is absent — never a skip.
+      # BF-03 conformance + losslessness gates. UNCONDITIONAL since the BF-04
+      # close-out (the scripts exist; deleting one must be a RED check): each
+      # exits non-zero if a golden fails the HL7 validator, a round-trip
+      # drifts without a loss-ledger entry, or java/jar/cache is absent.
       - name: FHIR round-trip (lossless-or-ledgered)
         if: matrix.task == 'test'
-        run: |
-          set -euo pipefail
-          if [ -f scripts/fhir/roundtrip.ts ]; then bun run fhir:roundtrip; fi
+        run: bun run fhir:roundtrip
       - name: FHIR conformance (HL7 validator, US Core 6.1.0)
         if: matrix.task == 'test'
-        run: |
-          set -euo pipefail
-          if [ -f scripts/fhir/validate.ts ]; then bun run fhir:validate; fi
+        run: bun run fhir:validate
       # BF-04: SQL-on-FHIR v2 conformance over the vendored, sha256-pinned HL7
-      # suite (fixtures/sql-on-fhir). Feature-guarded like the BF-03 legs but
-      # fail-closed once the runner exists: any non-allowlisted failure, hash
-      # mismatch vs MANIFEST.json, or case-count drift exits non-zero.
+      # suite (fixtures/sql-on-fhir). UNCONDITIONAL: any non-allowlisted
+      # failure, hash mismatch vs MANIFEST.json, case-count drift, or a pass
+      # count off the manifest's shareable floor exits non-zero. Pinned by
+      # conformance-wiring.test.ts (BP-021 class).
       - name: SQL-on-FHIR conformance (vendored HL7 suite)
         if: matrix.task == 'test'
-        run: |
-          set -euo pipefail
-          if [ -f packages/sql-on-fhir/src/cli/conformance.ts ]; then bun run conformance; fi
+        run: bun run conformance
+      # Stage-2 execution evals (H5): every corpus row runs the BUILT artifact
+      # against the booted stack and exits non-zero on any red case. This is
+      # the machine-run form of each slice's evals[] (bf02 + bf04 today).
+      - name: Loop execution evals (Stage 2)
+        if: matrix.task == 'test'
+        run: bun run loop eval
       - name: Tear down product stack
         if: always() && matrix.task == 'test'
         run: |
