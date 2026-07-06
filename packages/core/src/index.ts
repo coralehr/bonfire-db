@@ -5,8 +5,30 @@
  * client is deliberately not exported, so every consumer read/write runs inside
  * a transaction whose tenant GUC drives the fail-closed RLS policies.
  */
+export { decide } from "./abac/decide.js";
+export type {
+  AccessScope,
+  Decision,
+  PolicyReceipt,
+  PurposeOfUse,
+  ReceiptPurpose,
+  ResourceAttrs,
+  Role,
+  Subject
+} from "./abac/types.js";
+export { accessScopeSchema, PURPOSES_OF_USE, ROLES } from "./abac/types.js";
+export { appendAuditRowTx, authorizeAndAudit } from "./audit/audit-log.js";
+export type { AuditLogicalFields } from "./audit/row-hash.js";
+export {
+  AUDIT_CHAIN_DOMAIN,
+  auditRowHash,
+  GENESIS_PREV_HASH,
+  SHA256_HEX_LENGTH
+} from "./audit/row-hash.js";
+export type { AuditChainReport, AuditChainRow, ChainBreakReason } from "./audit/verify.js";
+export { verifyAuditChainTx, walkChain } from "./audit/verify.js";
 export type { JsonObject, JsonValue } from "./db/canonical-json.js";
-export { canonicalizeJson, contentHash } from "./db/canonical-json.js";
+export { canonicalizeJson, contentHash, sha256Hex } from "./db/canonical-json.js";
 export type { DatabaseTarget, EnvMap } from "./db/env.js";
 export { devDatabaseUrl, resolveDatabaseTarget } from "./db/env.js";
 export type {

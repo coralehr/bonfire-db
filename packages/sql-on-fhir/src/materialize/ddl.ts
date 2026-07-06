@@ -91,6 +91,11 @@ export async function createProjectionTable(sql: SqlHandle, plan: TablePlan): Pr
     as permissive for all to "bonfire_app"
     using ("practice_id" = (select safe_uuid(current_setting('app.current_practice_id', true))))
     with check ("practice_id" = (select safe_uuid(current_setting('app.current_practice_id', true))))`;
+  // vd_* are WRITABLE projections (upsertProjection DELETE+INSERTs them). Since
+  // BP-018 flipped the initdb default grant to SELECT,INSERT-only, U/D must be
+  // granted explicitly here — mirroring spidx's explicit grant — or the
+  // in-transaction projection upsert loses DELETE and the write path breaks.
+  await sql`grant select, insert, update, delete on ${sql(plan.table)} to "bonfire_app"`;
 }
 
 function valueFragment(sql: SqlHandle, pgType: PgColumnType, value: JsonValue): Fragment {

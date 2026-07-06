@@ -29,11 +29,13 @@
       "entry": [
         "scripts/synthetic-scan/index.ts",
         "scripts/sql-on-fhir/**/*.ts",
+        "scripts/audit-demo/**/*.ts",
         "tests/sql-on-fhir/**/*.test.ts"
       ],
       "project": [
         "scripts/synthetic-scan/**/*.ts",
         "scripts/sql-on-fhir/**/*.ts",
+        "scripts/audit-demo/**/*.ts",
         "tests/sql-on-fhir/**/*.ts"
       ]
     }

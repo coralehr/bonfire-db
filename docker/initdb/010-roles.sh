@@ -35,9 +35,15 @@ REVOKE ALL ON SCHEMA public FROM PUBLIC;
 GRANT USAGE ON SCHEMA public TO bonfire_app;
 
 -- Tables/sequences created later by migrations (as postgres, the owner) are
--- readable/writable by the app role — DML only, never DDL, never ownership.
+-- readable/insertable by the app role — DML only, never DDL, never ownership.
+-- BP-018: default to APPEND-friendly SELECT,INSERT only. UPDATE/DELETE is
+-- opt-IN — every mutable table GRANTs it explicitly in its migration (or, for
+-- runtime vd_* tables, in the projection DDL generator). A migration that
+-- forgets therefore ships an APPEND-ONLY table (fail-closed), never a
+-- silently-mutable one. (Not retroactive: only tables created after this runs,
+-- i.e. every migration table on a fresh volume, are governed by it.)
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
-  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO bonfire_app;
+  GRANT SELECT, INSERT ON TABLES TO bonfire_app;
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
   GRANT USAGE, SELECT ON SEQUENCES TO bonfire_app;
 SQL

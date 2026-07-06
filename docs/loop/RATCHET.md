@@ -5,7 +5,7 @@
 > `loop ratchet` (and the test suite): if the guard artifact disappears,
 > the check fails and the bug is considered reopened.
 
-22 guarded · 10 open (debt owed a guard)
+24 guarded · 8 open (debt owed a guard)
 
 ## BP-001 — gate-crash-read-as-pass — GUARDED
 
@@ -55,12 +55,12 @@
 - Planned guard: eval: scope-before-retrieve golden test with policy receipt (BF-06/T9, loop/evals)
 - Recorded: 2026-06-25
 
-## BP-007 — audit-bypass — OPEN
+## BP-007 — audit-bypass — GUARDED
 
 - Symptom: Audit history could be overwritten in place, so tampering with past events was undetectable.
 - Root cause: Audit rows were plain mutable rows with no tamper-evidence chain linking each entry to its predecessor.
-- Fix: Append-only audit with prev_hash + row_hash chain; every write path emits exactly one audit event and chain verification detects tamper (BF-05).
-- Planned guard: eval: hash-chain tamper eval (BF-05/T9, loop/evals)
+- Fix: BF-05: authorizeAndAudit appends UNCONDITIONALLY (no allow/deny branch — every decision emits exactly one row); audit_log is append-only for the app (GRANT S/I + REVOKE U/D under the BP-018 flipped default, 42501 proven); the per-practice hash chain (row_hash=sha256(canonical(fields+prev_hash)), domain-separated genesis, advisory-lock append, UNIQUE(practice_id,seq)+(practice_id,prev_hash) backstops) makes any partial tamper detectable at the exact broken link. The Stage-2 eval proves THIRD-PARTY verifiability: an independent oracle (zero product code) appends spec-conformant rows, verifies the stored chain, detects an owner-mutated row at the exact index, and re-verifies clean after restore.
+- Guard: `eval` → `loop/evals/bf05.jsonl::bf05-audit-tamper-detect`
 - Recorded: 2026-06-25
 
 ## BP-008 — lossy-fhir — GUARDED
@@ -143,12 +143,12 @@
 - Guard: `eval` → `loop/evals/bf02.jsonl::bf02-scanner-error-redacts-content`
 - Recorded: 2026-07-03
 
-## BP-018 — append-only-by-forgotten-revoke — OPEN
+## BP-018 — append-only-by-forgotten-revoke — GUARDED
 
 - Symptom: Append-only tables are one forgotten REVOKE away from mutable: the initdb default privileges pre-grant UPDATE/DELETE on every FUTURE table, so a migration that omits the explicit REVOKE silently ships a mutable 'append-only' table.
 - Root cause: docker/initdb/010-roles.sh ALTER DEFAULT PRIVILEGES grants S/I/U/D wholesale, making immutability opt-out per migration instead of opt-in.
-- Fix: BF-02's migration carries explicit REVOKEs (proven by has_table_privilege tests); the structural fix — flip the default grant to SELECT,INSERT and grant U/D explicitly on mutable tables, plus a catalog posture test over declared append-only tables — needs a docker/** harness wave.
-- Planned guard: harness wave: initdb default-privilege flip to S/I-only + a catalog posture test enumerating append-only tables (queue before BF-05's audit table lands)
+- Fix: BP-018 wave (BF-05 prep): initdb docker/initdb/010-roles.sh ADP flipped to GRANT SELECT,INSERT only (append-only is now opt-out->opt-in, fail-closed); every mutable table grants U/D explicitly (fhir_resources/spidx in migrations, rls_scaffold in 0006, vd_* in the projection DDL generator ddl.ts); the audit_log table (0007) is append-only by the flipped default + REVOKE belt. A catalog posture test pins the full matrix (append-only S/I-only incl. audit_log, terminology read-only, mutable positive controls U/D).
+- Guard: `test` → `packages/core/src/db/fhir-rls.test.ts::BP-018 posture`
 - Recorded: 2026-07-03
 
 ## BP-019 — unique-constraint-existence-oracle — OPEN

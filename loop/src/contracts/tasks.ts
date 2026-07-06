@@ -283,6 +283,12 @@ export const tasks: readonly SliceContract[] = [
     goal: "Build the read-path security primitives: an ABAC policy decision that is default-deny and emits a structured policy receipt on every allow AND deny, computed from request scope BEFORE any target row is retrieved, with purpose-of-use (TREAT / HPAYMT / HOPERAT / HRESCH / ETREAT) as a typed, required input bound onto both the decision and the receipt; plus an append-only, hash-chained (prev_hash + row_hash) tamper-evident audit log with a verification routine that detects any mutation, reordering, insertion, or deletion and exposes each row_hash for downstream citation linkage. The decision is a pure typed default-deny function (Cedar/OPA semantics — default-deny, forbid-wins, no rule ordering — without adopting an external runtime PDP in v0).",
     why: "Retrofitting authorization and audit is how PHI leaks and how tampering goes unnoticed. Scope-before-retrieve plus default-deny prevents the scope-after-retrieve leak class, and a verifiable prev_hash/row_hash chain makes the audit trail trustworthy enough to anchor CCP span citations and satisfy HIPAA 45 CFR 164.312 audit-controls and integrity. These are primitives consumed by cited search (BF-06), CCP (BF-07), and governance (BF-09), so they must be correct and fail-closed from row zero.",
     dependsOn: ["BF-01", "BF-02"],
+    // The BP-018 fix (initdb ADP flip to SELECT,INSERT-only + the vd_* DDL
+    // grant) is off this floor by design — docker/** and packages/sql-on-fhir/**
+    // are operator-prep territory, landed in the prep commit that is this
+    // slice's gate --base, so they never appear in the maker diff. The maker
+    // works entirely within packages/core/** (abac + audit modules); drizzle/**
+    // migrations (0006 rls_scaffold grant, 0007 audit_log) are operator-prep.
     allowedPaths: ["packages/core/**", "drizzle/**", "docker-compose.yml"],
     forbiddenPaths: ["sgrule-tests/**", "docs/loop/**", "packages/fhir/**"],
     acceptance: [
@@ -299,8 +305,13 @@ export const tasks: readonly SliceContract[] = [
       "All ABAC/audit modules satisfy the repo TS bar (no any, no @ts-ignore/eslint-disable, exhaustive switch on the decision/outcome union, explicit return types on exports, Zod validation of policy input and audit input at the boundary) and the full gate passes for the touched packages."
     ],
     verify: [
-      "docker compose up -d",
+      "docker compose down -v",
+      "docker compose up -d --wait",
       "bun install",
+      "bun run db:migrate",
+      "bun run seed",
+      "bun run fhir:load-terminology",
+      "bun run projections:rebuild",
       "bun run typecheck",
       "bun run lint",
       "bun test packages/core/",

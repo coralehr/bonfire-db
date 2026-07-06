@@ -1,0 +1,11 @@
+-- BP-018 wave (operator prep, coupled to the off-floor initdb ADP flip):
+-- rls_scaffold (BF-01, 0000) is a MUTABLE tenant table that relied on the
+-- pre-flip default privilege pre-grant for UPDATE/DELETE. With the initdb
+-- default flipped to SELECT,INSERT-only, its U/D must be granted explicitly
+-- (the RLS test battery deletes rows through withTenant as bonfire_app; the
+-- scaffold is a demo mutable table, not append-only). fhir_resources (0002)
+-- and spidx (0004) already carry explicit S/I/U/D grants; the runtime vd_*
+-- tables get theirs from the projection DDL generator. This migration only
+-- closes the rls_scaffold gap; the BF-05 audit table lands in a later
+-- migration.
+GRANT SELECT, INSERT, UPDATE, DELETE ON "rls_scaffold" TO "bonfire_app";
