@@ -54,3 +54,24 @@ export async function bannedShapes(): Promise<void> {
   void nearMissTag;
   void concatenated;
 }
+
+// BP-005 — the tenant GUC must be transaction-local so it cannot survive on a
+// pooled connection. set_config(..., true) and SET LOCAL are the sanctioned
+// forms; the session spellings (false / bare SET / SET SESSION) must be flagged.
+export async function transactionLocalGucIsSanctioned(): Promise<void> {
+  // ok: bonfire-session-set-app-guc
+  await sql`select set_config('app.current_practice_id', ${practiceId}, true)`;
+  // ok: bonfire-session-set-app-guc
+  await sql`set local app.current_practice_id = ${practiceId}`;
+  // ok: bonfire-session-set-app-guc
+  await sql`select set_config('statement_timeout', '5s', false)`;
+}
+
+export async function sessionScopedGucBleeds(): Promise<void> {
+  // ruleid: bonfire-session-set-app-guc
+  await sql`select set_config('app.current_practice_id', ${practiceId}, false)`;
+  // ruleid: bonfire-session-set-app-guc
+  await sql`set app.current_practice_id = ${practiceId}`;
+  // ruleid: bonfire-session-set-app-guc
+  await sql`set session app.current_practice_id to ${practiceId}`;
+}

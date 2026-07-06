@@ -1,0 +1,54 @@
+# Authorization attributes (practice_id / role) must come ONLY from the
+# server-side membership row (resolveMembership), NEVER from a request body /
+# header / query or a decoded token / claims object (BF-13, acceptance #5,
+# claims-not-trusted). Reading practiceId/practice_id/role off an untrusted
+# source lets the client name its own tenant/role — a total ABAC bypass /
+# privilege escalation. The sanctioned sources (membership, the resolved
+# Membership value) are not matched.
+id: no-authz-attr-from-request
+language: TypeScript
+severity: error
+message: practice_id/role must come only from resolveMembership, never a request/claims/token object.
+note: |
+  practiceId and role are AUTHORITY attributes. Their only source is the
+  membership row (resolveMembership). Reading them off a request body/header/
+  query/params or a decoded token/claims/payload object trusts the client to
+  name its own tenant/role. Populate them from the resolved membership instead.
+metadata:
+  slop-pattern: authz-attr-from-untrusted
+  gate-stage: 1
+rule:
+  kind: member_expression
+  all:
+    - has:
+        field: property
+        regex: "^(practiceId|practice_id|role)$"
+    - has:
+        field: object
+        stopBy: end
+        kind: identifier
+        regex: "^(req|request|body|headers|header|query|params|payload|claims|token|decoded|jwt)$"
+---
+id: no-authz-attr-from-request-tsx
+language: Tsx
+severity: error
+message: practice_id/role must come only from resolveMembership, never a request/claims/token object.
+note: |
+  practiceId and role are AUTHORITY attributes. Their only source is the
+  membership row (resolveMembership). Reading them off a request body/header/
+  query/params or a decoded token/claims/payload object trusts the client to
+  name its own tenant/role. Populate them from the resolved membership instead.
+metadata:
+  slop-pattern: authz-attr-from-untrusted
+  gate-stage: 1
+rule:
+  kind: member_expression
+  all:
+    - has:
+        field: property
+        regex: "^(practiceId|practice_id|role)$"
+    - has:
+        field: object
+        stopBy: end
+        kind: identifier
+        regex: "^(req|request|body|headers|header|query|params|payload|claims|token|decoded|jwt)$"

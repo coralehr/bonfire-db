@@ -40,7 +40,13 @@ export type {
 export { insertFhirResourceTx, jsonValueSchema, updateFhirResourceTx } from "./db/fhir-store.js";
 export type { MigrateErrorCode } from "./db/migrate.js";
 export { runMigrations } from "./db/migrate.js";
-export type { TenantDb, TenantSql, WithTenantErrorCode } from "./db/tenant.js";
+export type {
+  Membership,
+  ResolveMembershipErrorCode,
+  TenantDb,
+  TenantSql,
+  WithTenantErrorCode
+} from "./db/tenant.js";
 export { connectTenantDb } from "./db/tenant.js";
 export type { FhirCodingRef } from "./fhir/codings.js";
 export { collectCodings } from "./fhir/codings.js";

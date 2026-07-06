@@ -1,0 +1,24 @@
+# Behaviour tests for no-authz-attr-from-request. Run: bunx ast-grep test --skip-snapshot-tests
+id: no-authz-attr-from-request
+valid:
+  - |
+    const p = membership.practiceId;
+  - |
+    const r = resolved.role;
+  - |
+    const auth = req.headers.authorization;
+  - |
+    const s = identity.sub;
+  - |
+    const i = verified.iss;
+invalid:
+  - |
+    const p = req.body.practiceId;
+  - |
+    const p2 = payload.practice_id;
+  - |
+    const r = claims.role;
+  - |
+    const t = token.practiceId;
+  - |
+    const q = query.role;

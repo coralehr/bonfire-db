@@ -172,8 +172,13 @@ describe("schema catalog", () => {
     for (const table of ["history", "write_inputs", "seed_completions", "audit_log"]) {
       expect(await priv(table)).toEqual({ upd: false, del: false, ins: true, sel: true });
     }
-    // Reference data: read-only for the app (loader writes as owner).
-    for (const table of ["terminology_pack", "terminology_concept"]) {
+    // Reference data: read-only for the app (loader writes as owner). The
+    // membership directory (BF-13) is on this list as the trust anchor: the app
+    // may SELECT (resolve identity->practice) but NEVER INSERT/UPDATE/DELETE —
+    // if it could self-provision a row it could self-assign any practice_id +
+    // role (a total ABAC bypass). This pins the 0008 REVOKE INSERT structurally,
+    // so a regression that re-grants write on membership fails HERE.
+    for (const table of ["terminology_pack", "terminology_concept", "membership"]) {
       expect(await priv(table)).toEqual({ upd: false, del: false, ins: false, sel: true });
     }
     // Mutable positive controls: the explicit grants must give U/D, or the
