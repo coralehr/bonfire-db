@@ -152,6 +152,39 @@ describe("schema catalog", () => {
     expect(latest[0]?.upd).toBe(true);
     expect(latest[0]?.del).toBe(true);
   });
+
+  // BP-018 catalog posture matrix: the initdb default privilege is now
+  // SELECT,INSERT-only, so append-only is opt-out -> opt-in. This pins the
+  // posture in BOTH directions — a regression that re-grants U/D on an
+  // append-only table OR strips it from a mutable one fails here. The audit
+  // table (BF-05) is on the append-only list; the mutable positive controls
+  // prove the explicit grants (0002/0004/0006 + the vd_* DDL generator) fire.
+  test("BP-018 posture: append-only, read-only, and mutable tables each hold", async () => {
+    const priv = async (table: string) => {
+      const [row] = await sql<{ upd: boolean; del: boolean; ins: boolean; sel: boolean }[]>`
+        select has_table_privilege('bonfire_app', ${table}, 'UPDATE') as upd,
+               has_table_privilege('bonfire_app', ${table}, 'DELETE') as del,
+               has_table_privilege('bonfire_app', ${table}, 'INSERT') as ins,
+               has_table_privilege('bonfire_app', ${table}, 'SELECT') as sel`;
+      return row;
+    };
+    // Append-only: S/I, never U/D. Includes the new BF-05 audit_log.
+    for (const table of ["history", "write_inputs", "seed_completions", "audit_log"]) {
+      expect(await priv(table)).toEqual({ upd: false, del: false, ins: true, sel: true });
+    }
+    // Reference data: read-only for the app (loader writes as owner).
+    for (const table of ["terminology_pack", "terminology_concept"]) {
+      expect(await priv(table)).toEqual({ upd: false, del: false, ins: false, sel: true });
+    }
+    // Mutable positive controls: the explicit grants must give U/D, or the
+    // BP-018 flip would silently break the write path (rls_scaffold cleanup,
+    // spidx/vd_* projection upsert, fhir_resources versioning).
+    for (const table of ["fhir_resources", "spidx", "rls_scaffold"]) {
+      const p = await priv(table);
+      expect(p?.upd).toBe(true);
+      expect(p?.del).toBe(true);
+    }
+  });
 });
 
 describe("fail-closed default-deny", () => {

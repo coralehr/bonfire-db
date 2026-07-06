@@ -5,7 +5,7 @@
 > `loop ratchet` (and the test suite): if the guard artifact disappears,
 > the check fails and the bug is considered reopened.
 
-22 guarded · 10 open (debt owed a guard)
+23 guarded · 9 open (debt owed a guard)
 
 ## BP-001 — gate-crash-read-as-pass — GUARDED
 
@@ -143,12 +143,12 @@
 - Guard: `eval` → `loop/evals/bf02.jsonl::bf02-scanner-error-redacts-content`
 - Recorded: 2026-07-03
 
-## BP-018 — append-only-by-forgotten-revoke — OPEN
+## BP-018 — append-only-by-forgotten-revoke — GUARDED
 
 - Symptom: Append-only tables are one forgotten REVOKE away from mutable: the initdb default privileges pre-grant UPDATE/DELETE on every FUTURE table, so a migration that omits the explicit REVOKE silently ships a mutable 'append-only' table.
 - Root cause: docker/initdb/010-roles.sh ALTER DEFAULT PRIVILEGES grants S/I/U/D wholesale, making immutability opt-out per migration instead of opt-in.
-- Fix: BF-02's migration carries explicit REVOKEs (proven by has_table_privilege tests); the structural fix — flip the default grant to SELECT,INSERT and grant U/D explicitly on mutable tables, plus a catalog posture test over declared append-only tables — needs a docker/** harness wave.
-- Planned guard: harness wave: initdb default-privilege flip to S/I-only + a catalog posture test enumerating append-only tables (queue before BF-05's audit table lands)
+- Fix: BP-018 wave (BF-05 prep): initdb docker/initdb/010-roles.sh ADP flipped to GRANT SELECT,INSERT only (append-only is now opt-out->opt-in, fail-closed); every mutable table grants U/D explicitly (fhir_resources/spidx in migrations, rls_scaffold in 0006, vd_* in the projection DDL generator ddl.ts); the audit_log table (0007) is append-only by the flipped default + REVOKE belt. A catalog posture test pins the full matrix (append-only S/I-only incl. audit_log, terminology read-only, mutable positive controls U/D).
+- Guard: `test` → `packages/core/src/db/fhir-rls.test.ts::BP-018 posture`
 - Recorded: 2026-07-03
 
 ## BP-019 — unique-constraint-existence-oracle — OPEN
