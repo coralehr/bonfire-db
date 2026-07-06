@@ -97,8 +97,24 @@ function toChainRow(raw: unknown): AuditChainRow {
  * Read the current tenant's audit chain (RLS-scoped) and verify it. Canonical
  * text is read exactly as it was hashed: `::text` for seq/practice_id, and a
  * UTC `to_char` that byte-matches the ISO-8601 timestamp written at append time.
+ *
+ * The `MS` mask truncates to millisecond precision, matching the ms-precision
+ * ISO string the write path hashes. Owner-only micro-residual: an owner
+ * shifting a committed row's occurred_at by <1ms is not chain-detectable (the
+ * truncated preimage is unchanged) — too small for a meaningful backdate, and
+ * outside the app-role threat model (the app cannot UPDATE at all).
  */
 export async function verifyAuditChainTx(sql: TenantSql): Promise<AuditChainReport> {
+  // Require a bound tenant: without a practice GUC, RLS hides every row and an
+  // unscoped verify would vacuously read "clean" (ok, rows: 0). A genuinely
+  // empty chain for a bound tenant is still ok — this only rejects the
+  // forgot-to-scope case.
+  const ctx = await sql`
+    select (select safe_uuid(current_setting('app.current_practice_id', true))) is not null as bound`;
+  const boundRow = z.object({ bound: z.boolean() }).safeParse(ctx[0]);
+  if (!boundRow.success || !boundRow.data.bound) {
+    throw new Error("audit chain verification requires a bound practice context");
+  }
   const rows = await sql`
     select seq::text as seq, practice_id::text as practice_id, actor_id, decision,
       resource_type, purpose_of_use, matched_rule_id, reason,

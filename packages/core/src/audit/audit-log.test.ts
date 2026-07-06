@@ -12,6 +12,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
 import type { TransactionSql } from "postgres";
+import type { PolicyReceipt } from "../abac/types.js";
 import { createSqlClient } from "../db/client.js";
 import { devDatabaseUrl, resolveDatabaseTarget } from "../db/env.js";
 import type { TenantSql } from "../db/tenant.js";
@@ -20,6 +21,19 @@ import { appendAuditRowTx, authorizeAndAudit } from "./audit-log.js";
 import { verifyAuditChainTx } from "./verify.js";
 
 const CLOCK = (): string => "2026-07-06T12:34:56.789Z";
+
+function receiptFor(practice: string, timestamp: string): PolicyReceipt {
+  return {
+    decision: "deny",
+    actorId: "actor-1",
+    resourceType: "Observation",
+    practiceId: practice,
+    purposeOfUse: "TREAT",
+    matchedRuleId: null,
+    reason: "deny: test",
+    timestamp
+  };
+}
 
 const appDb = createTenantDb(createSqlClient(resolveDatabaseTarget(), { max: 5 }));
 const owner = createSqlClient({ kind: "url", url: devDatabaseUrl("migrate") }, { max: 1 });
@@ -55,6 +69,13 @@ async function appendThree(practice: string): Promise<void> {
     await authorizeAndAudit(sql, allowScope(practice), CLOCK);
     await authorizeAndAudit(sql, denyScope(practice), CLOCK);
     await authorizeAndAudit(sql, allowScope(practice), CLOCK);
+  });
+}
+
+async function auditRowCount(tenant: string): Promise<number | undefined> {
+  return await inTenant(tenant, async (sql) => {
+    const rows = await sql<{ n: number }[]>`select count(*)::int as n from audit_log`;
+    return rows[0]?.n;
   });
 }
 
@@ -150,6 +171,45 @@ describe("audit-no-read-without-receipt: exactly one row per decision", () => {
     expect(stored.length).toBe(1);
     expect(stored[0]?.decision).toBe("deny");
     expect(stored[0]?.purpose_of_use).toBe("unknown");
+  });
+});
+
+describe("audit input boundary guards", () => {
+  test("a receipt whose practice differs from the bound tenant is refused (mis-attribution)", async () => {
+    const tenant = randomUUID();
+    const otherPractice = randomUUID();
+    const result = await appDb.withTenant(tenant, (sql) =>
+      appendAuditRowTx(sql, receiptFor(otherPractice, "2026-07-06T00:00:00.000Z"))
+    );
+    // The throw rolls the tenant tx back → withTenant returns a typed err.
+    expect(result.ok).toBe(false);
+    expect(await auditRowCount(tenant)).toBe(0);
+  });
+
+  test("a non-canonical timestamp is refused fail-closed (ISO-8601 ms UTC only)", async () => {
+    const tenant = randomUUID();
+    for (const bad of ["2026-07-06T00:00:00Z", "2026-07-06T05:30:00.000+05:30", "not-a-date"]) {
+      const result = await appDb.withTenant(tenant, (sql) =>
+        appendAuditRowTx(sql, receiptFor(tenant, bad))
+      );
+      expect(result.ok).toBe(false);
+    }
+    expect(await auditRowCount(tenant)).toBe(0);
+  });
+
+  test("verifying a session whose GUC folds to null is refused, not vacuously clean", async () => {
+    // A garbage GUC folds to null (safe_uuid), RLS hides every row, and an
+    // unguarded verify would read ok/rows:0. It must throw instead.
+    let thrown: string | undefined;
+    try {
+      await appRaw.begin(async (tx) => {
+        await tx`select set_config('app.current_practice_id', 'not-a-uuid', true)`;
+        return await verifyAuditChainTx(tx);
+      });
+    } catch (error) {
+      thrown = String(error);
+    }
+    expect(thrown).toContain("bound practice context");
   });
 });
 

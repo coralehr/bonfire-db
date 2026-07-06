@@ -178,8 +178,11 @@ describe("schema catalog", () => {
     }
     // Mutable positive controls: the explicit grants must give U/D, or the
     // BP-018 flip would silently break the write path (rls_scaffold cleanup,
-    // spidx/vd_* projection upsert, fhir_resources versioning).
-    for (const table of ["fhir_resources", "spidx", "rls_scaffold"]) {
+    // spidx/vd_* projection upsert, fhir_resources versioning). vd_* is
+    // included so a regression in the ddl.ts runtime grant is caught at the
+    // posture pin, not only behaviourally when the projection upsert breaks.
+    // (vd_patient_demographics exists after the boot chain's projections:rebuild.)
+    for (const table of ["fhir_resources", "spidx", "rls_scaffold", "vd_patient_demographics"]) {
       const p = await priv(table);
       expect(p?.upd).toBe(true);
       expect(p?.del).toBe(true);

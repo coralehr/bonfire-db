@@ -109,6 +109,22 @@ describe("decide — default-deny fail-closed matrix", () => {
     expect(receipt.reason).toBe("deny: no matching allow rule");
   });
 
+  test("every deferred purpose-of-use denies even for a clinician (only TREAT allows in v0)", () => {
+    for (const purposeOfUse of ["HPAYMT", "HOPERAT", "HRESCH"] as const) {
+      const receipt = decide(scope({ purposeOfUse }), now);
+      expect(receipt.decision).toBe("deny");
+      expect(receipt.purposeOfUse).toBe(purposeOfUse);
+      expect(receipt.matchedRuleId).toBeNull();
+    }
+  });
+
+  test("non-clinician roles deny even with TREAT + matching practice", () => {
+    for (const role of ["biller", "operations", "researcher"] as const) {
+      const receipt = decide(scope({ subject: { id: ACTOR, role, practiceId: PRACTICE } }), now);
+      expect(receipt.decision).toBe("deny");
+    }
+  });
+
   test("practice mismatch (resource in another practice) → deny", () => {
     const receipt = decide(
       scope({ resource: { resourceType: "Observation", practiceId: OTHER_PRACTICE } }),

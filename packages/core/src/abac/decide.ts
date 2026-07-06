@@ -102,9 +102,17 @@ export function decide(input: unknown, now: () => string): PolicyReceipt {
   const parsed = accessScopeSchema.safeParse(input);
   if (!parsed.success) return denyMalformed(now);
   const scope = parsed.data;
-  const forbidden = V0_FORBID_RULES.find((rule) => rule.matches(scope));
-  if (forbidden !== undefined) return receiptFor(scope, "deny", forbidden.id, now);
-  const permitted = V0_ALLOW_RULES.find((rule) => rule.matches(scope));
-  const decision: Decision = permitted === undefined ? "deny" : "allow";
-  return receiptFor(scope, decision, permitted?.id ?? null, now);
+  try {
+    const forbidden = V0_FORBID_RULES.find((rule) => rule.matches(scope));
+    if (forbidden !== undefined) return receiptFor(scope, "deny", forbidden.id, now);
+    const permitted = V0_ALLOW_RULES.find((rule) => rule.matches(scope));
+    const decision: Decision = permitted === undefined ? "deny" : "allow";
+    return receiptFor(scope, decision, permitted?.id ?? null, now);
+  } catch {
+    // Totality guarantee: any rule-evaluation error resolves to DENY with a
+    // receipt (never a throw-to-caller a read path could mistake for allow).
+    // v0 matchers are pure comparisons and cannot throw; this defends the
+    // invariant for future rules.
+    return receiptFor(scope, "deny", null, now);
+  }
 }
