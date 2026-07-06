@@ -1,0 +1,3 @@
+{"id":"bf05-audit-tamper-detect","slice":"BF-05","traces":"BP-007 + BF-05 acceptance 7 (audit-bypass; third-party chain verifiability via an independent oracle)","run":{"command":["bun","loop/src/evals/bf05-audit-tamper-detect.ts"]}}
+{"id":"bf05-audit-append-only","slice":"BF-05","traces":"BP-018 + BF-05 acceptance 5 (append-only at the DB layer, live 42501 + posture)","run":{"command":["bun","loop/src/evals/bf05-audit-append-only.ts"]}}
+{"id":"bf05-audit-rls-fail-closed","slice":"BF-05","traces":"BF-05 acceptance 8 (cross-tenant-leak on audit_log; raw app-role probe)","run":{"command":["bun","loop/src/evals/bf05-audit-rls-fail-closed.ts"]}}
