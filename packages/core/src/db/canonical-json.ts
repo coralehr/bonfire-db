@@ -66,3 +66,12 @@ export function contentHash(resource: JsonObject): string {
   const canonical = canonicalizeJson(stripVolatileMeta(resource));
   return createHash("sha256").update(canonical, "utf8").digest("hex");
 }
+
+/**
+ * SHA-256 hex over an already-canonical string. Distinct from `contentHash`:
+ * it hashes the exact bytes given (no meta stripping), so the audit chain
+ * preimage covers every logical field verbatim, including FHIR meta.
+ */
+export function sha256Hex(canonical: string): string {
+  return createHash("sha256").update(canonical, "utf8").digest("hex");
+}
