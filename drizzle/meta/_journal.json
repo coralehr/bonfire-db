@@ -64,6 +64,13 @@
       "when": 1752105600000,
       "tag": "0008_membership",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1752192000000,
+      "tag": "0009_search_doc",
+      "breakpoints": true
     }
   ]
 }

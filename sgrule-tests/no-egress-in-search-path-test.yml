@@ -1,0 +1,50 @@
+# Behaviour tests for no-egress-in-search-path (ratchet BP-035). Run:
+# bunx ast-grep test --skip-snapshot-tests
+# Path scoping (files/ignores) does not apply to inline cases — these prove the
+# PATTERNS; the search-only + test-exempt scoping lives in the rule. Local
+# in-process inference (onnxruntime-node, @xenova/transformers) stays VALID: it
+# is the allowed self-hosted path (no off-box call), only network/hosted-API
+# egress is banned.
+id: no-egress-in-search-path
+valid:
+  - |
+    import { z } from "zod";
+  - |
+    import { createHash } from "node:crypto";
+  - |
+    import type { TenantSql } from "../db/tenant.js";
+  - |
+    const rows = await sql`select resource_id from search_doc order by embedding <=> ${qvec}::vector limit 40`;
+  - |
+    import { pipeline } from "@xenova/transformers";
+  - |
+    import * as ort from "onnxruntime-node";
+invalid:
+  - |
+    import http from "node:http";
+  - |
+    import https from "node:https";
+  - |
+    import { request } from "undici";
+  - |
+    import axios from "axios";
+  - |
+    import got from "got";
+  - |
+    import fetch from "node-fetch";
+  - |
+    import OpenAI from "openai";
+  - |
+    import { CohereClient } from "cohere-ai";
+  - |
+    import Anthropic from "@anthropic-ai/sdk";
+  - |
+    import { GoogleGenerativeAI } from "@google/generative-ai";
+  - |
+    import { HfInference } from "@huggingface/inference";
+  - |
+    import Replicate from "replicate";
+  - |
+    const r = await fetch("https://api.openai.com/v1/embeddings");
+  - |
+    const mod = require("undici");

@@ -1,0 +1,56 @@
+# No PHI egress from the cited-search path (ratchet BP-035).
+# BF-06's security floor: in the default config, search performs ZERO external
+# embedding/rerank calls — the dev embedder is node:crypto feature-hashing and a
+# real embedder is a SELF-HOSTED, in-process/on-box model. A blocking network
+# client (fetch / node:http|https / undici / axios / got / node-fetch) or a
+# HOSTED-model API SDK (openai / cohere-ai / @anthropic-ai/sdk /
+# @google/generative-ai / @huggingface/inference / replicate) under
+# packages/core/src/search/** would ship PHI (the query text) off-box. Banned
+# outright — the structural control behind the bf06-no-phi-egress eval.
+# NOTE: local in-process inference libs (onnxruntime-node, @xenova/transformers)
+# are NOT banned — they are the ALLOWED self-hosted path (no network leaves the
+# tenant boundary). Tests are exempt (they spy to PROVE the invariant).
+id: no-egress-in-search-path
+language: TypeScript
+severity: error
+message: Network/hosted-model egress in the cited-search path — search must make no off-box call in the default config (PHI egress).
+note: |
+  Cited search embeds/ranks with a self-hosted, in-process model (the v0 dev
+  embedder is node:crypto only). Do not import node:http, node:https, undici,
+  axios, got, or node-fetch, do not call fetch(), and do not import a hosted
+  embedding/LLM API SDK (openai, cohere-ai, @anthropic-ai/sdk,
+  @google/generative-ai, @huggingface/inference, replicate) under
+  packages/core/src/search. Run the model on-box instead.
+metadata:
+  slop-pattern: phi-egress-search-path
+  gate-stage: 1
+  ratchet: BP-035
+files:
+  - "packages/core/src/search/**"
+ignores:
+  - "**/*.test.ts"
+rule:
+  any:
+    - pattern: import $$$X from "node:http"
+    - pattern: import $$$X from "node:https"
+    - pattern: import $$$X from "undici"
+    - pattern: import $$$X from "axios"
+    - pattern: import $$$X from "got"
+    - pattern: import $$$X from "node-fetch"
+    - pattern: import $$$X from "openai"
+    - pattern: import $$$X from "cohere-ai"
+    - pattern: import $$$X from "@anthropic-ai/sdk"
+    - pattern: import $$$X from "@google/generative-ai"
+    - pattern: import $$$X from "@huggingface/inference"
+    - pattern: import $$$X from "replicate"
+    - pattern: require("node:http")
+    - pattern: require("node:https")
+    - pattern: require("undici")
+    - pattern: require("axios")
+    - pattern: require("got")
+    - pattern: require("node-fetch")
+    - pattern: require("openai")
+    - pattern: import("node:http")
+    - pattern: import("node:https")
+    - pattern: import("undici")
+    - pattern: fetch($$$ARGS)
