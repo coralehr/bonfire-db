@@ -5,7 +5,7 @@
 > `loop ratchet` (and the test suite): if the guard artifact disappears,
 > the check fails and the bug is considered reopened.
 
-24 guarded · 8 open (debt owed a guard)
+25 guarded · 9 open (debt owed a guard)
 
 ## BP-001 — gate-crash-read-as-pass — GUARDED
 
@@ -262,3 +262,19 @@
 - Fix: Rewrote the affected comments as vd_* + spidx; convention noted, no structural guard yet.
 - Planned guard: an sgrule/lint check flagging */ immediately followed by an identifier character inside block comments, or an ast-grep pattern on the parse error class
 - Recorded: 2026-07-04
+
+## BP-033 — order-by-text-alias-shadow — GUARDED
+
+- Symptom: An audit chain that reaches 10 rows STICKS: every further appendAuditRowTx reads '9' as the tip, recomputes seq=10, collides on (practice_id,seq) -> 23505/TENANT_TX_FAILED; and verifyAuditChainTx reports a false seq_gap. Surfaced by BF-13's shared SYSTEM chain crossing 10 over many runs; a fresh-stack CI run never accumulates 10 rows in one chain, so CI structurally could not catch it.
+- Root cause: appendAuditRowTx and verifyAuditChainTx both project `seq::text as seq` and then `order by seq`; Postgres binds the unqualified ORDER BY to the TEXT output alias, so the chain sorts lexicographically ('1','10','2',...,'9'). The tip read returns '9' as the max and walkChain derives expectedSeq from array position -> gap.
+- Fix: Qualified both ORDER BYs to the bigint column (order by audit_log.seq) in audit/audit-log.ts + audit/verify.ts and the loop bf05-chain-oracle eval; the same latent pattern in audit-log.test.ts fixed too.
+- Guard: `test` → `packages/core/src/audit/audit-log.test.ts::twelve sequential appends stay seq 1..12`
+- Recorded: 2026-07-07
+
+## BP-034 — tight-timeout-heavy-db-test — OPEN
+
+- Symptom: Under `turbo run test` (all packages' DB suites concurrent on one Postgres), the sql-on-fhir full-DROP+rebuild determinism tests time out at the default 5000ms (~6s needed) and cascade a CONNECTION_ENDED; green in isolation / when cached, red under load. Pre-existing (BF-04), off-floor; BF-13's added DB load made it visible.
+- Root cause: A heavy full-projection-rebuild integration test was left on bun's default 5s timeout, too tight under concurrent DB contention.
+- Fix: Added --timeout 20000 to the @bonfire/sql-on-fhir test script (matches the DB_TIMEOUT_MS=30_000 convention in the audit/auth DB suites).
+- Planned guard: a shared DB-test timeout convention or a dedicated/serialized Postgres lane for the sql-on-fhir rebuild suite; today only the raised --timeout 20000 mitigates it.
+- Recorded: 2026-07-07

@@ -9,6 +9,8 @@
  */
 import type { Sql, TransactionSql } from "postgres";
 import { z } from "zod";
+import type { Role } from "../abac/types.js";
+import { ROLES } from "../abac/types.js";
 import type { BonfireError, Result } from "../result.js";
 import { err, ok } from "../result.js";
 import type { SqlClientOptions } from "./client.js";
@@ -20,6 +22,14 @@ export type TenantSql = TransactionSql;
 
 export type WithTenantErrorCode = "INVALID_PRACTICE_ID" | "TENANT_TX_FAILED";
 
+export type ResolveMembershipErrorCode = "MEMBERSHIP_QUERY_FAILED";
+
+/** The authority a verified external identity maps to (BF-13). */
+export interface Membership {
+  readonly practiceId: string;
+  readonly role: Role;
+}
+
 export interface TenantDb {
   /**
    * Run `fn` inside a tenant-scoped transaction. Invalid practice ids and any
@@ -30,11 +40,26 @@ export interface TenantDb {
     practiceId: string,
     fn: (sql: TenantSql) => Promise<T>
   ): Promise<Result<T, BonfireError<WithTenantErrorCode>>>;
+  /**
+   * Resolve a verified external identity (iss, sub) to its practice + role
+   * (BF-13). Runs with NO tenant GUC — this read HAPPENS BEFORE a practice
+   * context exists (you read this row to LEARN the practice_id), so it relies
+   * on the membership table's GUC-independent SELECT policy, not withTenant.
+   * The lookup is a single parameterized equality query; `ok(null)` means the
+   * identity is authenticated but not a member (deny), a value means a hit, and
+   * a DB fault is a typed err (fail-closed). practice_id/role come ONLY from
+   * here — never from a token claim or request input (claims-not-trusted).
+   */
+  resolveMembership(
+    iss: string,
+    sub: string
+  ): Promise<Result<Membership | null, BonfireError<ResolveMembershipErrorCode>>>;
   /** Close the underlying pool (graceful shutdown). */
   end(): Promise<void>;
 }
 
 const practiceIdSchema = z.uuid();
+const membershipRowSchema = z.object({ practice_id: z.uuid(), role: z.enum(ROLES) });
 const END_TIMEOUT_SECONDS = 5;
 
 /** Wrap an existing client. Internal seam — tests compose it with a max:1 pool. */
@@ -66,6 +91,28 @@ export function createTenantDb(sql: Sql): TenantDb {
         return err({ code: "TENANT_TX_FAILED", message: "transaction yielded no result" });
       }
       return ok(captured.value);
+    },
+    async resolveMembership(
+      iss: string,
+      sub: string
+    ): Promise<Result<Membership | null, BonfireError<ResolveMembershipErrorCode>>> {
+      try {
+        // No set_config: this read runs BEFORE any tenant context (it produces
+        // the practice_id). Parameterized equality only; membership's SELECT
+        // policy is GUC-independent, and its transaction-local absence means a
+        // reused pooled connection carries no prior tenant's context.
+        const rows = await sql`
+          select practice_id::text as practice_id, role
+          from membership
+          where iss = ${iss} and sub = ${sub}
+          limit 1`;
+        if (rows[0] === undefined) return ok(null);
+        const parsed = membershipRowSchema.safeParse(rows[0]);
+        if (!parsed.success) return ok(null);
+        return ok({ practiceId: parsed.data.practice_id, role: parsed.data.role });
+      } catch (_cause) {
+        return err({ code: "MEMBERSHIP_QUERY_FAILED", message: "membership lookup failed" });
+      }
     },
     end(): Promise<void> {
       return sql.end({ timeout: END_TIMEOUT_SECONDS });

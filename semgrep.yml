@@ -317,3 +317,60 @@ rules:
         - "**/*.test.mjs"
         - "**/*.test.js"
         - "**/*.spec.ts"
+
+  # --------------------------------------------------------------------------
+  # RATCHET BP-005 — a SESSION-level app.* GUC bleeds across pooled connections.
+  # The tenant scope (app.current_practice_id) MUST be set transaction-locally,
+  # so that when the connection returns to the pool the GUC is already gone. Two
+  # spellings set it for the whole SESSION and survive into the next request
+  # that reuses the same physical connection — a silent cross-tenant read:
+  #   * set_config('app.<x>', <v>, false)  — the third arg `false` = not-local
+  #   * SET app.<x> = ...  /  SET SESSION app.<x> ...  — session by default
+  # The ONLY sanctioned form is set_config('app.<x>', <v>, true) (withTenant) or
+  # the equivalent SET LOCAL app.<x> — both scoped to the open transaction; the
+  # `true` / `LOCAL` branches are deliberately NOT matched. This is BF-13
+  # acceptance #5 made structural: the by-hand tenant GUC can never outlive its
+  # transaction on the max:1 pool.
+  # --------------------------------------------------------------------------
+  - id: bonfire-session-set-app-guc
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >-
+      Session-level app.* GUC set: this tenant scope survives past the
+      transaction and bleeds into the next request that reuses the pooled
+      connection (BP-005 cross-tenant read). Set it transaction-locally instead:
+      set_config('app.current_practice_id', <value>, true) or SET LOCAL. Never
+      pass `false` to set_config for an app.* GUC and never use a bare/SESSION
+      SET for one.
+    metadata:
+      category: security
+      subcategory: [vuln]
+      confidence: HIGH
+      likelihood: HIGH
+      impact: HIGH
+      cwe:
+        - "CWE-488: Exposure of Data Element to Wrong Session"
+        - "CWE-285: Improper Authorization"
+      owasp:
+        - "A01:2021 - Broken Access Control"
+      references:
+        - https://www.postgresql.org/docs/current/functions-admin.html#FUNCTIONS-ADMIN-SET
+    patterns:
+      - pattern-either:
+          # set_config for an app.* GUC whose is_local arg is literally false.
+          - pattern-regex: '(?i)set_config\s*\(\s*([''"`])app\.[^''"`]*\1\s*,[^,)]*,\s*false\s*\)'
+          # Bare or SESSION SET of an app.* GUC. SET LOCAL app.* is NOT matched
+          # (after `set ` the next word is `local`, not the optional `session`).
+          - pattern-regex: '(?i)\bset\s+(?:session\s+)?app\.[a-z0-9_.]+\s*(?:=|to\b)'
+    paths:
+      include:
+        - "packages/**"
+        - "apps/**"
+        - "scripts/**"
+        - "seed/**"
+      exclude:
+        - "**/*.test.ts"
+        - "**/*.test.tsx"
+        - "**/*.test.mjs"
+        - "**/*.test.js"
+        - "**/*.spec.ts"

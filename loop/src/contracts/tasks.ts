@@ -813,6 +813,31 @@ export const tasks: readonly SliceContract[] = [
     goal: "Build the thin, IdP-agnostic identity boundary that connects external authentication to fail-closed RLS. A `verifyToken` function (jose: cached kid-aware JWKS with key rotation, a positive `alg` allow-list, asserted iss + aud + exp) returns a typed Result that fails closed; verified claims are mapped via a server-side `(iss, sub) -> membership` table to the practice_id + role used by BF-01's RLS GUC, set transaction-locally. One configurable OIDC adapter ships in v0; the SMART claim vocabulary (fhirUser, patient/clinician compartment) is adopted now so SMART is a later additive adapter, but the SMART authorization server is deferred.",
     why: "RLS is only as trustworthy as the code path that sets the tenant context, so the verified-identity -> practice_id bridge is the single load-bearing line that makes fail-closed multi-tenancy real for an agent-native backend. The dangerous failure modes are concrete and from-row-zero: algorithm-confusion / `alg:none`, missing iss/aud, trusting client-supplied tenant/role, and pooled-connection context bleed (session-level tenant context leaking across pooled-connection checkouts). Consuming verified identity (not being a SMART OAuth server) is the right, bounded v0 surface.",
     dependsOn: ["BF-01"],
+    // Operator prep (BF-13, disclosed) — the gate-base commit this slice builds
+    // ON carries the changes that live OFF the maker floor, so the maker diff
+    // (HEAD vs gate base) stays inside allowedPaths and the strict allowed-paths
+    // gate holds:
+    //   * packages/core/src/db/tenant.ts (+ the resolveMembership/Membership
+    //     exports on the on-floor index.ts) — the GUC-less
+    //     `(iss,sub)->{practiceId,role}` read. db/** is OFF the floor (only
+    //     auth/**, index.ts and *.test.ts are on it), so this is prep scope.
+    //   * drizzle/0008_membership.sql (+ meta/_journal) — the membership
+    //     directory table (REVOKE INSERT from bonfire_app = the trust anchor).
+    //     Migrated into the stack before the maker starts, so Steps that read it
+    //     compile/run against a ready DB at HEAD.
+    //   * package.json + bun.lock — jose@6.2.3 (already present; the maker adds
+    //     no deps, keeping `bun install --frozen-lockfile` green). bun.lock is
+    //     intentionally NOT in allowedPaths: its change is in the gate base, not
+    //     the maker diff.
+    //   * sgrules/no-authz-attr-from-request.yml (+ sgrule-tests) and the
+    //     semgrep `bonfire-session-set-app-guc` rule (+ sgrule-tests/semgrep) —
+    //     the two guards acceptance #4/#5 name. Guard authorship is operator
+    //     territory (guard-selection principle), never maker scope.
+    // Deferred (disclosed, out of this slice's floor): production wiring of the
+    // auth middleware into apps/api/src/{app,server}.ts (off-floor) and the
+    // SMART authorization-server endpoints. The middleware ships as an
+    // injectable `runAuthenticated(...)` proven via a test-constructed Fastify
+    // app; the ADR records the deferred wiring.
     allowedPaths: [
       "packages/core/src/auth/**",
       "packages/core/src/index.ts",

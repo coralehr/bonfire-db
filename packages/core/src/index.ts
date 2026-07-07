@@ -27,6 +27,18 @@ export {
 } from "./audit/row-hash.js";
 export type { AuditChainReport, AuditChainRow, ChainBreakReason } from "./audit/verify.js";
 export { verifyAuditChainTx, walkChain } from "./audit/verify.js";
+export type { AuthAuditResult, AuthFailure } from "./auth/auth-audit.js";
+export {
+  auditAuthFailure,
+  auditAuthSuccess,
+  buildAuthReceipt,
+  SYSTEM_PRACTICE_ID
+} from "./auth/auth-audit.js";
+export type { AuthError, AuthErrorCode } from "./auth/errors.js";
+export type { VerifiedIdentity, VerifyTokenConfig } from "./auth/types.js";
+export { DEFAULT_FHIR_USER_CLAIM, verifiedClaimsSchema } from "./auth/types.js";
+export type { Verifier } from "./auth/verify-token.js";
+export { createVerifier, verifyToken } from "./auth/verify-token.js";
 export type { JsonObject, JsonValue } from "./db/canonical-json.js";
 export { canonicalizeJson, contentHash, sha256Hex } from "./db/canonical-json.js";
 export type { DatabaseTarget, EnvMap } from "./db/env.js";
@@ -40,7 +52,13 @@ export type {
 export { insertFhirResourceTx, jsonValueSchema, updateFhirResourceTx } from "./db/fhir-store.js";
 export type { MigrateErrorCode } from "./db/migrate.js";
 export { runMigrations } from "./db/migrate.js";
-export type { TenantDb, TenantSql, WithTenantErrorCode } from "./db/tenant.js";
+export type {
+  Membership,
+  ResolveMembershipErrorCode,
+  TenantDb,
+  TenantSql,
+  WithTenantErrorCode
+} from "./db/tenant.js";
 export { connectTenantDb } from "./db/tenant.js";
 export type { FhirCodingRef } from "./fhir/codings.js";
 export { collectCodings } from "./fhir/codings.js";

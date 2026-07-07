@@ -115,12 +115,17 @@ export async function verifyAuditChainTx(sql: TenantSql): Promise<AuditChainRepo
   if (!boundRow.success || !boundRow.data.bound) {
     throw new Error("audit chain verification requires a bound practice context");
   }
+  // ORDER BY is QUALIFIED (audit_log.seq): the projection aliases seq::text as
+  // seq, so an unqualified `order by seq` binds to that TEXT output column and
+  // sorts LEXICOGRAPHICALLY (…,"8","9","10","2"). walkChain derives expectedSeq
+  // from array position, so at >=10 rows that mis-order reports a false seq_gap.
+  // Qualifying binds to the bigint column (numeric order). See BP-033.
   const rows = await sql`
     select seq::text as seq, practice_id::text as practice_id, actor_id, decision,
       resource_type, purpose_of_use, matched_rule_id, reason,
       to_char(occurred_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as occurred_at,
       prev_hash, row_hash
     from audit_log
-    order by seq asc`;
+    order by audit_log.seq asc`;
   return walkChain(rows.map((row) => toChainRow(row)));
 }

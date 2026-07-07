@@ -63,6 +63,15 @@ async function inTenant<T>(practice: string, fn: (sql: TenantSql) => Promise<T>)
   return result.data;
 }
 
+/** The seq column of the current tenant's chain in numeric (audit_log.seq) order. */
+async function chainSeqs(practice: string): Promise<string[]> {
+  return inTenant(practice, async (sql) => {
+    const rows = await sql<{ seq: string }[]>`
+      select seq::text as seq from audit_log order by audit_log.seq asc`;
+    return rows.map((r) => r.seq);
+  });
+}
+
 /** Append the standard allow/deny/allow 3-row chain for a fresh practice. */
 async function appendThree(practice: string): Promise<void> {
   await inTenant(practice, async (sql) => {
@@ -151,7 +160,7 @@ describe("audit-no-read-without-receipt: exactly one row per decision", () => {
     expect(deny.receipt.decision).toBe("deny");
     const afterDeny = await inTenant(practice, async (sql) => {
       const rows = await sql<{ decision: string; seq: string }[]>`
-        select decision, seq::text as seq from audit_log order by seq asc`;
+        select decision, seq::text as seq from audit_log order by audit_log.seq asc`;
       return rows;
     });
     expect(afterDeny.length).toBe(2);
@@ -312,12 +321,7 @@ describe("concurrent appends do not fork the chain", () => {
       inTenant(practice, (sql) => authorizeAndAudit(sql, denyScope(practice), CLOCK))
     ]);
     expect(r1.auditRowHash).not.toBe(r2.auditRowHash);
-    const seqs = await inTenant(practice, async (sql) => {
-      const rows = await sql<
-        { seq: string }[]
-      >`select seq::text as seq from audit_log order by seq asc`;
-      return rows.map((r) => r.seq);
-    });
+    const seqs = await chainSeqs(practice);
     expect(seqs).toEqual(["1", "2"]);
     const report = await inTenant(practice, (sql) => verifyAuditChainTx(sql));
     expect(report.ok).toBe(true);
@@ -342,7 +346,7 @@ describe("direct appendAuditRowTx seam", () => {
     );
     const stored = await inTenant(practice, async (sql) => {
       const rows = await sql<{ prev_hash: string; seq: string }[]>`
-        select prev_hash, seq::text as seq from audit_log order by seq asc`;
+        select prev_hash, seq::text as seq from audit_log order by audit_log.seq asc`;
       return rows;
     });
     expect(stored.length).toBe(1);
@@ -351,5 +355,34 @@ describe("direct appendAuditRowTx seam", () => {
       "40c830dd17cd0878cb29288c881f77e1c581a4dc40ab784552ad309f8260978c"
     );
     expect(first.auditRowHash).toMatch(/^[0-9a-f]{64}$/);
+  });
+});
+
+// BP-033 regression: the tip read + verify read project `seq::text as seq`, so an
+// UNQUALIFIED `order by seq` binds to that TEXT alias and sorts lexicographically
+// (…,"8","9","10","2"). At >=10 rows that makes the tip read return "9" as the max
+// (append collides on seq=10 and the chain STICKS), and makes verify see a false
+// seq_gap. A fresh-stack CI run never accumulates 10 rows in one chain, so only a
+// chain that deliberately crosses 10 catches it. Both reads are now qualified
+// (order by audit_log.seq); this test fails fast if that qualification regresses.
+describe("BP-033: a chain past 10 rows appends contiguously and verifies", () => {
+  const CHAIN_LENGTH = 12;
+  test("twelve sequential appends stay seq 1..12 (numeric, not lexicographic) and verify ok", async () => {
+    const practice = randomUUID();
+    const hashes: string[] = [];
+    for (let i = 0; i < CHAIN_LENGTH; i += 1) {
+      // A lexicographic tip read would return "9" as the max at >=10 rows,
+      // recompute seq=10, collide on the existing seq-10 row, and throw here.
+      const res = await inTenant(practice, (sql) =>
+        appendAuditRowTx(sql, receiptFor(practice, CLOCK()))
+      );
+      hashes.push(res.auditRowHash);
+    }
+    expect(new Set(hashes).size).toBe(CHAIN_LENGTH);
+    const seqs = await chainSeqs(practice);
+    expect(seqs).toEqual(Array.from({ length: CHAIN_LENGTH }, (_, i) => String(i + 1)));
+    const report = await inTenant(practice, (sql) => verifyAuditChainTx(sql));
+    expect(report.ok).toBe(true);
+    if (report.ok) expect(report.rows).toBe(CHAIN_LENGTH);
   });
 });
