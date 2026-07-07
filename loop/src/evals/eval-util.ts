@@ -21,6 +21,25 @@ export function pass(evalId: string, summary: string): void {
   process.stdout.write(`eval ${evalId} PASS: ${summary}\n`);
 }
 
+/**
+ * Parse the LAST non-empty line of a product subprocess's output as JSON. A
+ * leading DB notice never corrupts the parse, and an empty or non-JSON tail is a
+ * loud eval failure. Shared by the product-driving eval utils (auth, search).
+ */
+export function lastJsonLine(evalId: string, output: string): unknown {
+  const lines = output
+    .trim()
+    .split("\n")
+    .filter((line) => line.length > 0);
+  const last = lines[lines.length - 1];
+  if (last === undefined) fail(evalId, "subprocess produced no output");
+  try {
+    return JSON.parse(last);
+  } catch (_cause) {
+    return fail(evalId, `subprocess output is not JSON:\n${output}`);
+  }
+}
+
 export interface RunResult {
   readonly status: number | null;
   readonly output: string;

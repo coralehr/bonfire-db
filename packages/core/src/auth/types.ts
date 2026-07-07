@@ -49,4 +49,11 @@ export interface VerifyTokenConfig {
   readonly algorithms: readonly string[];
   readonly clockToleranceSeconds: number;
   readonly claimNames?: { readonly fhirUser: string };
+  /**
+   * Optional per-deployment ceiling on token age (seconds). When set, a token
+   * whose `iat` is older than this — even one minted with a far-future `exp` — is
+   * rejected (TOKEN_EXPIRED), and `iat` becomes required. Caps the "long-lived
+   * far-future-exp" residual; omit to defer age policy entirely to the IdP.
+   */
+  readonly maxTokenAgeSeconds?: number;
 }
