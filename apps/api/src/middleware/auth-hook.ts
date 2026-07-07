@@ -70,7 +70,17 @@ async function denyAudited(
   responseCode: string,
   failure: AuthFailure
 ): Promise<void> {
-  await auditAuthFailure(deps.tenantDb, failure);
+  const audited = await auditAuthFailure(deps.tenantDb, failure);
+  // The access decision is fail-closed regardless (we still deny). But acceptance
+  // #8 requires every decision to leave an audit row, so a failed deny-audit
+  // (backend fault / retry exhaustion) must not be SILENT — surface it so the
+  // missing row is observable instead of an undetected forensic gap.
+  if (!audited.ok) {
+    reply.log.error(
+      { code: audited.error.code, reason: failure.kind },
+      "auth: deny decision could not be audited"
+    );
+  }
   sendError(reply, status, responseCode);
 }
 

@@ -28,7 +28,14 @@ CREATE TABLE "membership" (
 	CONSTRAINT "membership_iss_nonempty" CHECK (length("iss") > 0),
 	CONSTRAINT "membership_sub_nonempty" CHECK (length("sub") > 0),
 	CONSTRAINT "membership_role_check"
-		CHECK ("role" IN ('clinician', 'biller', 'operations', 'researcher'))
+		CHECK ("role" IN ('clinician', 'biller', 'operations', 'researcher')),
+	-- Defense-in-depth on the trust anchor: no real identity may be provisioned
+	-- onto the reserved SYSTEM practice (the global failed-auth audit chain). The
+	-- app role already cannot INSERT here (REVOKE INSERT), but this stops an
+	-- owner-side mistake from scoping a live (iss,sub) onto the SYSTEM chain,
+	-- which would enumerate identity handles across tenants.
+	CONSTRAINT "membership_not_system_practice"
+		CHECK ("practice_id" <> '00000000-0000-4000-8000-000000000000')
 );
 --> statement-breakpoint
 ALTER TABLE "membership" ENABLE ROW LEVEL SECURITY;

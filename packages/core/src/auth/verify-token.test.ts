@@ -74,20 +74,34 @@ async function signToken(
     iss?: string;
     aud?: string | null;
     sub?: string | null;
-    exp?: string | number;
+    exp?: string | number | null;
     kid?: string;
     key?: CryptoKey | Uint8Array;
   } = {}
 ): Promise<string> {
-  const jwt = new SignJWT(over.claims ?? { fhirUser: FHIR_USER }).setProtectedHeader({
-    alg: over.alg ?? "RS256",
-    kid: over.kid ?? KID_1
-  });
-  jwt.setIssuer(over.iss ?? ISSUER);
-  if (over.aud !== null) jwt.setAudience(over.aud ?? AUDIENCE);
-  if (over.sub !== null) jwt.setSubject(over.sub ?? SUBJECT);
-  jwt.setExpirationTime(over.exp ?? "2h");
-  return jwt.sign(over.key ?? key1.privateKey);
+  // Defaults fill undefined; an explicit `null` for aud/sub/exp OMITS that claim
+  // (applyOptional), which is how the negative controls build malformed tokens.
+  const {
+    claims = { fhirUser: FHIR_USER },
+    alg = "RS256",
+    iss = ISSUER,
+    aud = AUDIENCE,
+    sub = SUBJECT,
+    exp = "2h",
+    kid = KID_1,
+    key = key1.privateKey
+  } = over;
+  const jwt = new SignJWT(claims).setProtectedHeader({ alg, kid });
+  jwt.setIssuer(iss);
+  applyOptional(aud, (v) => jwt.setAudience(v));
+  applyOptional(sub, (v) => jwt.setSubject(v));
+  applyOptional(exp, (v) => jwt.setExpirationTime(v));
+  return jwt.sign(key);
+}
+
+/** Run `set(value)` unless the override is explicitly null (null OMITS the claim). */
+function applyOptional<T>(value: T | null, set: (v: T) => void): void {
+  if (value !== null) set(value);
 }
 
 /** verifyToken must accept `token` and yield the verified identity. */
@@ -157,6 +171,10 @@ describe("verifyToken fail-closed controls (each err, never ok)", () => {
   test("an expired token is rejected", async () => {
     const past = Math.floor(Date.now() / 1000) - ONE_HOUR_SECONDS;
     await rejects(await signToken({ exp: past }), "TOKEN_EXPIRED");
+  });
+
+  test("a token with NO exp claim is rejected (no permanent-access shape)", async () => {
+    await rejects(await signToken({ exp: null }), "CLAIM_INVALID");
   });
 
   test("an unknown kid is rejected (no JWKS match)", async () => {

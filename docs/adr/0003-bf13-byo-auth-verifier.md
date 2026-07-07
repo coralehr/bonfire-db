@@ -78,6 +78,16 @@ mapping, and the transaction-local tenant context that makes multi-tenancy real.
   scope, and the boundary is complete and injectable without them.
 - **SMART authorization-server endpoints** and a break-glass / role-elevation
   flow (BF-05 already parses but does not grant `ETREAT`).
+- **Patient compartment role.** v0 `ROLES` are the workforce set
+  (`clinician`/`biller`/`operations`/`researcher`), and `membership_role_check`
+  mirrors it. The SMART patient-vs-clinician *compartment* distinction needs a
+  `patient` principal, which only arrives via the SMART patient-launch flow —
+  deferred above with the SMART authorization server. Adding a `patient` role +
+  compartment scoping is an additive follow-up (a new enum value, a
+  `membership_role_check` migration, and compartment predicates) when that flow
+  lands; introducing an unused `patient` role now would be dead authority with no
+  consumer. The SMART *vocabulary* (`fhirUser`) is adopted today so the later
+  adapter is additive, not a rewrite.
 - **Membership admin/provisioning UX.** v0 provisions rows as the migration owner.
 - **SYSTEM-chain write throughput.** Every failed authentication appends to ONE
   shared SYSTEM hash chain. Appends are optimistic (read tip, write tip.seq+1) and

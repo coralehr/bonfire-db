@@ -66,7 +66,11 @@ async function verifyWithKeySet(
       algorithms: [...config.algorithms],
       issuer: config.issuer,
       audience: config.audience,
-      clockTolerance: config.clockToleranceSeconds
+      clockTolerance: config.clockToleranceSeconds,
+      // jose only validates exp when present; require it so a trusted-IdP token
+      // minted WITHOUT an expiry (a legacy/misconfig shape) can't grant permanent
+      // access. Absent exp -> ERR_JWT_CLAIM_VALIDATION_FAILED -> CLAIM_INVALID.
+      requiredClaims: ["exp"]
     });
     return toIdentity(payload, config);
   } catch (cause) {

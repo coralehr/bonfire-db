@@ -14,7 +14,14 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
 import type { Membership, TenantDb, TenantSql, Verifier } from "@bonfire/core";
-import { connectTenantDb, createVerifier, devDatabaseUrl, err, ok } from "@bonfire/core";
+import {
+  connectTenantDb,
+  createVerifier,
+  devDatabaseUrl,
+  err,
+  ok,
+  SYSTEM_PRACTICE_ID
+} from "@bonfire/core";
 import type { FastifyInstance } from "fastify";
 import fastify from "fastify";
 import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT, UnsecuredJWT } from "jose";
@@ -245,6 +252,30 @@ describe("a dropped audit never compromises authorization (audit-bypass / fail-o
       const res = await fetch(`${addr}/p`); // no Bearer -> deny; failure audit will error
       expect(res.status).toBe(401);
     });
+  });
+
+  test("a deny path ALWAYS invokes the SYSTEM failure-audit (wiring pinned, even when it fails)", async () => {
+    // Inversion-proof: a recording TenantDb captures the practice each withTenant
+    // targets. A deny must open the SYSTEM chain exactly once — if the
+    // auditAuthFailure call is ever removed, `audited` is empty and this fails.
+    const audited: string[] = [];
+    const recordingDownDb: TenantDb = {
+      withTenant: (practiceId) => {
+        audited.push(practiceId);
+        return Promise.resolve(err({ code: "TENANT_TX_FAILED", message: "audit backend down" }));
+      },
+      resolveMembership: () => Promise.resolve(ok(null)),
+      end: () => Promise.resolve()
+    };
+    await withStubApp({ verifier, tenantDb: recordingDownDb }, async (addr) => {
+      const res = await fetch(`${addr}/p`); // no Bearer -> deny, audited under SYSTEM
+      expect(res.status).toBe(401);
+    });
+    // The deny opened the SYSTEM chain (bounded-retry may attempt it more than
+    // once when the backend errors); every attempt targets SYSTEM, never a real
+    // tenant. Removing the auditAuthFailure call leaves this empty.
+    expect(audited.length).toBeGreaterThan(0);
+    expect(audited.every((practice) => practice === SYSTEM_PRACTICE_ID)).toBe(true);
   });
 
   test("a verified request whose authn audit fails -> 500 and the handler NEVER runs", async () => {
