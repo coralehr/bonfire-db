@@ -5,7 +5,7 @@
 > `loop ratchet` (and the test suite): if the guard artifact disappears,
 > the check fails and the bug is considered reopened.
 
-27 guarded · 7 open (debt owed a guard)
+30 guarded · 6 open (debt owed a guard)
 
 ## BP-001 — gate-crash-read-as-pass — GUARDED
 
@@ -47,12 +47,12 @@
 - Guard: `semgrep` → `bonfire-session-set-app-guc`
 - Recorded: 2026-06-25
 
-## BP-006 — scope-after-retrieve — OPEN
+## BP-006 — scope-after-retrieve — GUARDED
 
 - Symptom: Policy scope was applied AFTER retrieval: out-of-scope rows entered the candidate set and could leak through ranking, counts, or error paths.
 - Root cause: Retrieval queried first and filtered later, so the policy boundary sat above the data instead of in front of it.
-- Fix: Scope-before-retrieve is a slice contract invariant: the ABAC/RLS scope constrains the query itself and every read carries a policy receipt (BF-06).
-- Planned guard: eval: scope-before-retrieve golden test with policy receipt (BF-06/T9, loop/evals)
+- Fix: BF-06: scope-before-retrieve is structural. deriveScope probes the BF-05 decide() authority per searchable type BEFORE any row is fetched; a non-allow decision drops the type into excludedByPolicy (types + reasons + count, NEVER row-ids — no BP-019 existence oracle) and, when nothing is allowed, ZERO fusion SQL runs (no candidate set to filter). The scope predicate (resource_type = any(allowed)) is INLINE in each arm's base WHERE and RLS supplies practice_id; every search returns a structured policyReceipt + one audit event. The Stage-2 eval proves it on the BUILT product across the firewall: a product-side query spy shows a denied search reads search_doc ZERO times while an allowed search reads it (non-vacuous); removing the deny short-circuit reddens it.
+- Guard: `eval` → `loop/evals/bf06.jsonl::bf06-scope-before-retrieve`
 - Recorded: 2026-06-25
 
 ## BP-007 — audit-bypass — GUARDED
@@ -277,4 +277,20 @@
 - Root cause: A heavy full-projection-rebuild integration test was left on bun's default 5s timeout, too tight under concurrent DB contention.
 - Fix: Added --timeout 20000 to the @bonfire/sql-on-fhir test script (the heavy full-DROP+rebuild determinism suite needs ~6s and flakes at bun's default 5s under concurrent turbo DB load); a loop gate test pins that DB-test timeout floor so the mitigation cannot be silently removed or lowered. A dedicated/serialized Postgres lane for the rebuild suite remains a documented follow-up (accepted residual, not the reopening vector this guard closes).
 - Guard: `test` → `loop/src/gates/db-test-timeout.test.ts::BP-034: heavy DB test suites keep a generous timeout`
+- Recorded: 2026-07-07
+
+## BP-035 — phi-egress-search-path — GUARDED
+
+- Symptom: The cited-search path could ship PHI (the raw query text) off-box: a maker wiring an external embedding/rerank call or a hosted-model API SDK into the default search path would exfiltrate the query to a third party.
+- Root cause: Retrieval that embeds/ranks with a HOSTED model sends the query text off the tenant boundary; nothing structurally forbade a network client or a hosted-model SDK under the search module.
+- Fix: BF-06: the default path is self-hosted + in-process (node:crypto feature-hash dev embedder; the reranker is an undefined-by-default seam, no cross-encoder ships) so it makes ZERO off-box calls. The ast-grep rule no-egress-in-search-path bans network primitives (fetch/globalThis.fetch/WebSocket/EventSource + node:http|https|net|tls|dns|dgram|http2|child_process) and hosted-model API SDKs (openai/cohere-ai/@anthropic-ai/sdk/@google/generative-ai/@huggingface/inference/replicate) via static import, require, OR dynamic import() under packages/core/src/search/** (local in-process inference — onnxruntime-node, @xenova/transformers — stays allowed). The bf06-no-phi-egress Stage-2 eval is the live proof: a globalThis.fetch spy shows a real, results-returning default search makes zero off-box calls. Residual (follow-up): a repo-global network default-deny beyond the search module.
+- Guard: `ast-grep` → `sgrules/no-egress-in-search-path.yml`
+- Recorded: 2026-07-07
+
+## BP-036 — cross-suite-shared-db-ddl-race — GUARDED
+
+- Symptom: @bonfire/sql-on-fhir#test DROPs the shared vd_* tables + byte-identity-hashes a full rebuild of ALL fhir_resources; run concurrently under `turbo run test` with a suite that WRITES fhir_resources it flakes (two rebuilds see different corpora), and with a suite that READS vd_* it 42P01s on the DROP window. Reliably reproducible fresh once BF-06's search DB tests extended the core suite to overlap that window; green on main before only because the shorter core suite finished first.
+- Root cause: DB integration suites across packages share ONE Postgres and run concurrently under turbo; a suite mutating shared schema (DROP vd_*) or the global fhir_resources corpus races another suite's reads/rebuilds — the single-Postgres BP-034 residual.
+- Fix: A turbo package override serializes the sensitive suite: @bonfire/sql-on-fhir#test dependsOn @bonfire/core#test + @bonfire/api#test, so it runs last + alone — nothing writes fhir_resources / reads vd_* concurrently with its rebuild+drop. Proven 3/3 fresh + CI green. A loop gate test pins the override so removing it reopens the race.
+- Guard: `test` → `loop/src/gates/serialized-db-lane.test.ts::BP-036: the sql-on-fhir DB suite runs in a serialized lane`
 - Recorded: 2026-07-07

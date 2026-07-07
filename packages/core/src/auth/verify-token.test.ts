@@ -189,3 +189,36 @@ describe("verifyToken fail-closed controls (each err, never ok)", () => {
     await rejects("this.is.not-a-jwt", "TOKEN_MALFORMED");
   });
 });
+
+describe("verifyToken optional maxTokenAge ceiling", () => {
+  const cfgWithMax: VerifyTokenConfig = { ...CONFIG, maxTokenAgeSeconds: ONE_HOUR_SECONDS };
+  const FAR_FUTURE_SECONDS = ONE_HOUR_SECONDS * 24 * 365;
+
+  async function signAged(iatSecondsAgo: number): Promise<string> {
+    const now = Math.floor(Date.now() / 1000);
+    return new SignJWT({ fhirUser: FHIR_USER })
+      .setProtectedHeader({ alg: "RS256", kid: KID_1 })
+      .setIssuer(ISSUER)
+      .setAudience(AUDIENCE)
+      .setSubject(SUBJECT)
+      .setIssuedAt(now - iatSecondsAgo)
+      .setExpirationTime(now + FAR_FUTURE_SECONDS)
+      .sign(key1.privateKey);
+  }
+
+  test("a long-lived far-future-exp token minted before the ceiling is rejected", async () => {
+    const result = await verifyToken(await signAged(ONE_HOUR_SECONDS * 2), cfgWithMax, jwks);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("TOKEN_EXPIRED");
+  });
+
+  test("a fresh token within the ceiling verifies", async () => {
+    const result = await verifyToken(await signAged(0), cfgWithMax, jwks);
+    expect(result.ok).toBe(true);
+  });
+
+  test("without the ceiling (default), an old-iat far-future-exp token still verifies", async () => {
+    const result = await verifyToken(await signAged(ONE_HOUR_SECONDS * 2), CONFIG, jwks);
+    expect(result.ok).toBe(true);
+  });
+});

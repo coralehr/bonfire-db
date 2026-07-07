@@ -12,7 +12,7 @@
 
 import type { JSONWebKeySet } from "jose";
 import { exportJWK, exportSPKI, generateKeyPair, SignJWT, UnsecuredJWT } from "jose";
-import { fail, runArtifact } from "./eval-util.js";
+import { fail, lastJsonLine, runArtifact } from "./eval-util.js";
 
 const keyId = "bf13-eval-key";
 const algorithms = ["RS256", "ES256", "EdDSA"] as const;
@@ -156,20 +156,6 @@ export function authJob(params: {
   };
 }
 
-function parseOutcome(evalId: string, output: string): AuthOutcome {
-  const lines = output
-    .trim()
-    .split("\n")
-    .filter((line) => line.length > 0);
-  const last = lines[lines.length - 1];
-  if (last === undefined) fail(evalId, "authenticate.ts produced no output");
-  try {
-    return JSON.parse(last) as AuthOutcome;
-  } catch (_cause) {
-    return fail(evalId, `authenticate.ts output is not JSON:\n${output}`);
-  }
-}
-
 /** Run the product auth path for `job` and return its structured outcome. */
 export function runAuthenticate(evalId: string, job: AuthJob): AuthOutcome {
   const run = runArtifact(evalId, [
@@ -180,5 +166,5 @@ export function runAuthenticate(evalId: string, job: AuthJob): AuthOutcome {
   if (run.status !== 0) {
     fail(evalId, `authenticate.ts exited ${String(run.status)}:\n${run.output}`);
   }
-  return parseOutcome(evalId, run.output);
+  return lastJsonLine(evalId, run.output) as AuthOutcome;
 }

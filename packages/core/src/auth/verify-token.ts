@@ -62,16 +62,25 @@ async function verifyWithKeySet(
   resolveKey: JWTVerifyGetKey
 ): Promise<Result<VerifiedIdentity, AuthError>> {
   try {
-    const { payload } = await jwtVerify(token, resolveKey, {
+    // jose only validates exp when present; require it so a trusted-IdP token
+    // minted WITHOUT an expiry (a legacy/misconfig shape) can't grant permanent
+    // access. Absent exp -> ERR_JWT_CLAIM_VALIDATION_FAILED -> CLAIM_INVALID.
+    // When a maxTokenAge ceiling is configured, iat is also required (jose needs
+    // it to compute age) and an over-age token -> ERR_JWT_EXPIRED -> TOKEN_EXPIRED.
+    const base = {
       algorithms: [...config.algorithms],
       issuer: config.issuer,
       audience: config.audience,
       clockTolerance: config.clockToleranceSeconds,
-      // jose only validates exp when present; require it so a trusted-IdP token
-      // minted WITHOUT an expiry (a legacy/misconfig shape) can't grant permanent
-      // access. Absent exp -> ERR_JWT_CLAIM_VALIDATION_FAILED -> CLAIM_INVALID.
-      requiredClaims: ["exp"]
-    });
+      requiredClaims: config.maxTokenAgeSeconds === undefined ? ["exp"] : ["exp", "iat"]
+    };
+    const { payload } = await jwtVerify(
+      token,
+      resolveKey,
+      config.maxTokenAgeSeconds === undefined
+        ? base
+        : { ...base, maxTokenAge: config.maxTokenAgeSeconds }
+    );
     return toIdentity(payload, config);
   } catch (cause) {
     // Fail-closed: EVERY jose throw becomes a typed deny. A catch never yields ok.
