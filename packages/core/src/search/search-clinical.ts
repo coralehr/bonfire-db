@@ -63,7 +63,9 @@ async function retrieve(
   const vector = await embedder.embed(query);
   if (vector.length !== EMBEDDING_DIM) throw new Error("embedding dimension mismatch");
   const qvec = isZeroEmbedding(vector) ? null : `[${vector.join(",")}]`;
-  return fuseSearch(sql, { query, qvec, allowed, topN });
+  // model_id scopes both arms + the join to THIS embedder's space, so a non-default
+  // provider is never silently zeroed against dev-hash-v1 rows.
+  return fuseSearch(sql, { query, qvec, allowed, modelId: embedder.modelId, topN });
 }
 
 function toSearchHit(hit: FusedHit, rowHash: string): SearchHit {

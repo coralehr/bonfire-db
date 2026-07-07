@@ -20,6 +20,7 @@ import type { BonfireError, Result } from "../src/result.js";
 import { devEmbedder } from "../src/search/dev-embedder.js";
 import { indexResourceTx } from "../src/search/index-doc.js";
 import type {
+  EmbeddingProvider,
   RerankProvider,
   SearchConfig,
   SearchHit,
@@ -57,22 +58,38 @@ function fusionCorpus(): { docLex: Doc; docCode: Doc; docPara: Doc; decoy: Doc; 
   return { docLex, docCode, docPara, decoy, all: [docLex, docCode, docPara, decoy] };
 }
 
-async function seed(practiceId: string, docs: readonly Doc[]): Promise<void> {
-  const result = await db.withTenant(practiceId, async (sql) => {
-    for (const doc of docs) {
-      const inserted = await insertFhirResourceTx(sql, {
-        id: doc.id,
-        type: "Observation",
-        content: doc.content,
-        rawPayload: JSON.stringify(doc.content)
-      });
-      if (!inserted.ok) throw new Error(inserted.error.message);
-      const indexed = await indexResourceTx(sql, doc.id);
-      if (!indexed.ok) throw new Error(indexed.error.message);
+/** Attempts for a hermetic seed — retries a transient tx failure under load. */
+const SEED_ATTEMPTS = 3;
+
+async function seed(
+  practiceId: string,
+  docs: readonly Doc[],
+  embedder?: EmbeddingProvider
+): Promise<void> {
+  // Bounded retry: under concurrent `turbo run test` DB load a per-request tx can
+  // fail transiently (TENANT_TX_FAILED). withTenant is atomic — a failed tx commits
+  // nothing and the ids are random — so re-running the seed is safe, not a double
+  // insert. Any other error (or exhausting the retries) is a hard failure.
+  for (let attempt = 0; attempt < SEED_ATTEMPTS; attempt += 1) {
+    const result = await db.withTenant(practiceId, async (sql) => {
+      for (const doc of docs) {
+        const inserted = await insertFhirResourceTx(sql, {
+          id: doc.id,
+          type: "Observation",
+          content: doc.content,
+          rawPayload: JSON.stringify(doc.content)
+        });
+        if (!inserted.ok) throw new Error(inserted.error.message);
+        const indexed = await indexResourceTx(sql, doc.id, embedder);
+        if (!indexed.ok) throw new Error(indexed.error.message);
+      }
+      return true;
+    });
+    if (result.ok) return;
+    if (result.error.code !== "TENANT_TX_FAILED" || attempt === SEED_ATTEMPTS - 1) {
+      throw new Error(`seed failed: ${result.error.code}`);
     }
-    return true;
-  });
-  if (!result.ok) throw new Error(`seed failed: ${result.error.code}`);
+  }
 }
 
 function clinicianInput(query: string, practiceId: string): unknown {
@@ -223,6 +240,25 @@ describe("BF-06 hybrid fusion — both arms contribute and fuse", () => {
         r.results.map((h) => ({ id: h.resourceId, score: h.score, type: h.resourceType }))
       );
     expect(strip(first)).toBe(strip(second));
+  });
+
+  test("a non-default embedder is honoured end-to-end (model_id is threaded, not hardcoded)", async () => {
+    // Index + search under a provider whose modelId != dev-hash-v1. If fuse.ts
+    // pinned the constant model (the pre-fix foot-gun), the final join would filter
+    // out every custom-model row -> zero results; threading the active model_id
+    // surfaces it. Real (non-degenerate) vectors via the dev embedder's hasher.
+    const practice = randomUUID();
+    const doc = observation({ code: { coding: [{ system: SYNTH_SYSTEM, code: EXACT_TOKEN }] } });
+    const custom: EmbeddingProvider = {
+      modelId: "custom-model-v1",
+      dimension: 384,
+      embed: (text) => devEmbedder.embed(text)
+    };
+    await seed(practice, [doc], custom);
+    const response = await runOk(practice, clinicianInput(EXACT_TOKEN, practice), {
+      embedder: custom
+    });
+    expect(ids(response)).toContain(doc.id);
   });
 });
 
