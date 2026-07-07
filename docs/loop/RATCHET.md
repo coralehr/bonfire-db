@@ -5,7 +5,7 @@
 > `loop ratchet` (and the test suite): if the guard artifact disappears,
 > the check fails and the bug is considered reopened.
 
-25 guarded · 9 open (debt owed a guard)
+27 guarded · 7 open (debt owed a guard)
 
 ## BP-001 — gate-crash-read-as-pass — GUARDED
 
@@ -39,12 +39,12 @@
 - Guard: `ast-grep` → `sgrules/no-fail-open-auth.yml`
 - Recorded: 2026-06-25
 
-## BP-005 — cross-tenant-leak — OPEN
+## BP-005 — cross-tenant-leak — GUARDED
 
 - Symptom: One request's tenant context bled into the next request on a reused pooled DB connection; rows belonging to another tenant became readable.
 - Root cause: Tenant context was set with session-level SET on a pooled connection; the checkout that followed inherited the previous request's practice_id.
-- Fix: Transaction-local context only: set_config('app.current_practice_id', $1, true) inside the per-request transaction; bare/session SET for app.* is banned by contract (BF-01/BF-13).
-- Planned guard: ast-grep: ban session-level SET for app.* GUCs + eval bf-13-pool-no-bleed (BF-13)
+- Fix: Transaction-local context only: withTenant sets set_config('app.current_practice_id', $1, true) as the FIRST statement of every per-request transaction (packages/core/src/db/tenant.ts), so the GUC dies with the transaction and a pooled connection can never bleed practice A context into practice B's next checkout. Session/bare SET for app.* GUCs is banned structurally by the semgrep rule bonfire-session-set-app-guc (allows set_config(...,true)/SET LOCAL, rejects set_config(...,false)/bare SET), and no code can mint a client that skips withTenant (BP-012 no-raw-postgres-client). The bf13-pool-no-bleed Stage-2 eval is the live behavioural proof: on a max:1 pool a session SET DOES bleed across a checkout (positive control), while the product withTenant path delivers per-checkout tenant isolation and a no-identity connection default-denies to zero rows.
+- Guard: `semgrep` → `bonfire-session-set-app-guc`
 - Recorded: 2026-06-25
 
 ## BP-006 — scope-after-retrieve — OPEN
@@ -271,10 +271,10 @@
 - Guard: `test` → `packages/core/src/audit/audit-log.test.ts::twelve sequential appends stay seq 1..12`
 - Recorded: 2026-07-07
 
-## BP-034 — tight-timeout-heavy-db-test — OPEN
+## BP-034 — tight-timeout-heavy-db-test — GUARDED
 
 - Symptom: Under `turbo run test` (all packages' DB suites concurrent on one Postgres), the sql-on-fhir full-DROP+rebuild determinism tests time out at the default 5000ms (~6s needed) and cascade a CONNECTION_ENDED; green in isolation / when cached, red under load. Pre-existing (BF-04), off-floor; BF-13's added DB load made it visible.
 - Root cause: A heavy full-projection-rebuild integration test was left on bun's default 5s timeout, too tight under concurrent DB contention.
-- Fix: Added --timeout 20000 to the @bonfire/sql-on-fhir test script (matches the DB_TIMEOUT_MS=30_000 convention in the audit/auth DB suites).
-- Planned guard: a shared DB-test timeout convention or a dedicated/serialized Postgres lane for the sql-on-fhir rebuild suite; today only the raised --timeout 20000 mitigates it.
+- Fix: Added --timeout 20000 to the @bonfire/sql-on-fhir test script (the heavy full-DROP+rebuild determinism suite needs ~6s and flakes at bun's default 5s under concurrent turbo DB load); a loop gate test pins that DB-test timeout floor so the mitigation cannot be silently removed or lowered. A dedicated/serialized Postgres lane for the rebuild suite remains a documented follow-up (accepted residual, not the reopening vector this guard closes).
+- Guard: `test` → `loop/src/gates/db-test-timeout.test.ts::BP-034: heavy DB test suites keep a generous timeout`
 - Recorded: 2026-07-07
