@@ -16,6 +16,7 @@ import { createSqlClient } from "../db/client.js";
 import { devDatabaseUrl, resolveDatabaseTarget } from "../db/env.js";
 import type { Membership, TenantSql } from "../db/tenant.js";
 import { createTenantDb } from "../db/tenant.js";
+import type { AuthFailure } from "./auth-audit.js";
 import { auditAuthFailure, auditAuthSuccess, SYSTEM_PRACTICE_ID } from "./auth-audit.js";
 
 const ISS = "https://idp.synthetic.test/";
@@ -49,12 +50,21 @@ async function systemRowsByHash(
   });
 }
 
-function pgCode(error: unknown): string | undefined {
-  if (typeof error === "object" && error !== null && "code" in error) {
-    const { code } = error;
-    return typeof code === "string" ? code : undefined;
-  }
-  return undefined;
+/** Audit a failure, assert it wrote exactly one SYSTEM-chain row, and return it. */
+async function oneSystemDeny(
+  failure: AuthFailure,
+  clock?: () => string
+): Promise<{ actor_id: string; decision: string; reason: string }> {
+  const res = clock
+    ? await auditAuthFailure(db, failure, clock)
+    : await auditAuthFailure(db, failure);
+  expect(res.ok).toBe(true);
+  if (!res.ok) throw new Error(`audit failed: ${res.error.code}`);
+  const rows = await systemRowsByHash(res.data.auditRowHash);
+  expect(rows.length).toBe(1);
+  const [row] = rows;
+  if (row === undefined) throw new Error("expected exactly one SYSTEM row");
+  return row;
 }
 
 beforeAll(async () => {
@@ -143,14 +153,10 @@ describe("auth failure audit: one deny row on the SYSTEM chain", () => {
   test(
     "a verify failure -> exactly one SYSTEM deny by 'unverified' with reason auth:<code>",
     async () => {
-      const res = await auditAuthFailure(db, { kind: "verify", code: "ALG_NOT_ALLOWED" }, CLOCK);
-      expect(res.ok).toBe(true);
-      if (!res.ok) return;
-      const rows = await systemRowsByHash(res.data.auditRowHash);
-      expect(rows.length).toBe(1);
-      expect(rows[0]?.decision).toBe("deny");
-      expect(rows[0]?.actor_id).toBe("unverified");
-      expect(rows[0]?.reason).toBe("auth: ALG_NOT_ALLOWED");
+      const row = await oneSystemDeny({ kind: "verify", code: "ALG_NOT_ALLOWED" }, CLOCK);
+      expect(row.decision).toBe("deny");
+      expect(row.actor_id).toBe("unverified");
+      expect(row.reason).toBe("auth: ALG_NOT_ALLOWED");
     },
     DB_TIMEOUT_MS
   );
@@ -159,17 +165,10 @@ describe("auth failure audit: one deny row on the SYSTEM chain", () => {
     "a no-membership failure -> exactly one SYSTEM deny by the identity; chain from genesis",
     async () => {
       const sub = randomUUID();
-      const res = await auditAuthFailure(db, {
-        kind: "no-membership",
-        identity: { iss: ISS, sub }
-      });
-      expect(res.ok).toBe(true);
-      if (!res.ok) return;
-      const rows = await systemRowsByHash(res.data.auditRowHash);
-      expect(rows.length).toBe(1);
-      expect(rows[0]?.actor_id).toBe(`${ISS}#${sub}`);
-      expect(rows[0]?.decision).toBe("deny");
-      expect(rows[0]?.reason).toBe("auth: no membership");
+      const row = await oneSystemDeny({ kind: "no-membership", identity: { iss: ISS, sub } });
+      expect(row.actor_id).toBe(`${ISS}#${sub}`);
+      expect(row.decision).toBe("deny");
+      expect(row.reason).toBe("auth: no membership");
       // The SYSTEM chain is anchored at genesis and stays valid as it grows.
       const first = await inTenant(SYSTEM_PRACTICE_ID, async (sql) => {
         return sql<
@@ -201,14 +200,15 @@ describe("SYSTEM chain isolation + membership trust anchor", () => {
   test(
     "the app role cannot INSERT into membership (trust anchor -> 42501)",
     async () => {
-      let code: string | undefined;
-      try {
-        await appRaw`insert into membership (iss, sub, practice_id, role)
-          values (${ISS}, ${randomUUID()}, ${randomUUID()}, 'clinician')`;
-      } catch (error) {
-        code = pgCode(error);
-      }
-      expect(code).toBe("42501");
+      const rejected = await appRaw`insert into membership (iss, sub, practice_id, role)
+        values (${ISS}, ${randomUUID()}, ${randomUUID()}, 'clinician')`.then(
+        () => undefined,
+        (error: unknown) =>
+          typeof error === "object" && error !== null && "code" in error
+            ? String(error.code)
+            : undefined
+      );
+      expect(rejected).toBe("42501");
     },
     DB_TIMEOUT_MS
   );

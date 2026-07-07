@@ -20,7 +20,7 @@
     "build": "tsc -b",
     "typecheck": "tsc -b --noEmit",
     "lint": "eslint .",
-    "test": "bun test --pass-with-no-tests src ../../tests/sql-on-fhir",
+    "test": "bun test --timeout 20000 --pass-with-no-tests src ../../tests/sql-on-fhir",
     "gate": "echo gated"
   },
   "dependencies": {

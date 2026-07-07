@@ -40,8 +40,9 @@ export interface AuthDeps {
   readonly tenantDb: TenantDb;
 }
 
-/** The tenant-scoped context handed to an authenticated handler. */
-export interface AuthenticatedContext {
+/** The tenant-scoped context handed to an authenticated handler (internal:
+ *  reached only through the exported AuthenticatedHandler signature). */
+interface AuthenticatedContext {
   readonly identity: VerifiedIdentity;
   readonly membership: Membership;
   readonly sql: TenantSql;

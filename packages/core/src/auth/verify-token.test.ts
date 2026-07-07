@@ -19,7 +19,8 @@ import {
   SignJWT,
   UnsecuredJWT
 } from "jose";
-import type { VerifyTokenConfig } from "./types.js";
+import type { AuthErrorCode } from "./errors.js";
+import type { VerifiedIdentity, VerifyTokenConfig } from "./types.js";
 import { createVerifier, verifyToken } from "./verify-token.js";
 
 const ISSUER = "https://idp.synthetic.test/";
@@ -61,46 +62,67 @@ beforeAll(async () => {
   });
 });
 
-/** A fully-formed, signed RS256 token with the standard synthetic claims. */
-function baseToken(kid: string): SignJWT {
-  return new SignJWT({ fhirUser: FHIR_USER })
-    .setProtectedHeader({ alg: "RS256", kid })
-    .setIssuer(ISSUER)
-    .setAudience(AUDIENCE)
-    .setSubject(SUBJECT)
-    .setExpirationTime("2h");
+/**
+ * Sign a token with the standard synthetic claims; each override breaks exactly
+ * one property so a control test states its single deviation. `aud`/`sub` set to
+ * null are OMITTED; `alg`+`key` carry the RS256->HS256 confusion case.
+ */
+async function signToken(
+  over: {
+    claims?: Record<string, unknown>;
+    alg?: string;
+    iss?: string;
+    aud?: string | null;
+    sub?: string | null;
+    exp?: string | number;
+    kid?: string;
+    key?: CryptoKey | Uint8Array;
+  } = {}
+): Promise<string> {
+  const jwt = new SignJWT(over.claims ?? { fhirUser: FHIR_USER }).setProtectedHeader({
+    alg: over.alg ?? "RS256",
+    kid: over.kid ?? KID_1
+  });
+  jwt.setIssuer(over.iss ?? ISSUER);
+  if (over.aud !== null) jwt.setAudience(over.aud ?? AUDIENCE);
+  if (over.sub !== null) jwt.setSubject(over.sub ?? SUBJECT);
+  jwt.setExpirationTime(over.exp ?? "2h");
+  return jwt.sign(over.key ?? key1.privateKey);
+}
+
+/** verifyToken must accept `token` and yield the verified identity. */
+async function accepts(token: string): Promise<VerifiedIdentity> {
+  const result = await verifyToken(token, CONFIG, jwks);
+  expect(result.ok).toBe(true);
+  if (!result.ok) throw new Error(`expected ok, got err(${result.error.code})`);
+  return result.data;
+}
+
+/** verifyToken must reject `token` with exactly `code` (fail-closed, never ok). */
+async function rejects(token: string, code: AuthErrorCode): Promise<void> {
+  const result = await verifyToken(token, CONFIG, jwks);
+  expect(result.ok).toBe(false);
+  if (!result.ok) expect(result.error.code).toBe(code);
 }
 
 describe("verifyToken happy paths", () => {
   test("a legit RS256 token -> ok({iss,sub,fhirUser})", async () => {
-    const token = await baseToken(KID_1).sign(key1.privateKey);
-    const result = await verifyToken(token, CONFIG, jwks);
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.data.iss).toBe(ISSUER);
-      expect(result.data.sub).toBe(SUBJECT);
-      expect(result.data.fhirUser).toBe(FHIR_USER);
-    }
+    const id = await accepts(await signToken());
+    expect(id.iss).toBe(ISSUER);
+    expect(id.sub).toBe(SUBJECT);
+    expect(id.fhirUser).toBe(FHIR_USER);
   });
 
-  test("key rotation: a token signed by the second kid still verifies", async () => {
-    const token = await baseToken(KID_2).sign(key2.privateKey);
+  test("key rotation via the factory: a token signed by the second kid verifies", async () => {
+    const token = await signToken({ kid: KID_2, key: key2.privateKey });
     const result = await createVerifier(CONFIG, jwks).verifyToken(token);
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.data.sub).toBe(SUBJECT);
   });
 
   test("a token with no fhirUser claim verifies with fhirUser omitted", async () => {
-    const token = await new SignJWT({})
-      .setProtectedHeader({ alg: "RS256", kid: KID_1 })
-      .setIssuer(ISSUER)
-      .setAudience(AUDIENCE)
-      .setSubject(SUBJECT)
-      .setExpirationTime("2h")
-      .sign(key1.privateKey);
-    const result = await verifyToken(token, CONFIG, jwks);
-    expect(result.ok).toBe(true);
-    if (result.ok) expect(result.data.fhirUser).toBeUndefined();
+    const id = await accepts(await signToken({ claims: {} }));
+    expect(id.fhirUser).toBeUndefined();
   });
 });
 
@@ -112,106 +134,40 @@ describe("verifyToken fail-closed controls (each err, never ok)", () => {
       .setSubject(SUBJECT)
       .setExpirationTime("2h")
       .encode();
-    const result = await verifyToken(token, CONFIG, jwks);
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error.code).toBe("ALG_NOT_ALLOWED");
+    await rejects(token, "ALG_NOT_ALLOWED");
   });
 
   test("an RS256 key re-signed as HS256 (alg confusion) is rejected", async () => {
-    const spki = await exportSPKI(key1.publicKey);
-    const hmacSecret = new TextEncoder().encode(spki);
-    const token = await new SignJWT({ fhirUser: FHIR_USER })
-      .setProtectedHeader({ alg: "HS256", kid: KID_1 })
-      .setIssuer(ISSUER)
-      .setAudience(AUDIENCE)
-      .setSubject(SUBJECT)
-      .setExpirationTime("2h")
-      .sign(hmacSecret);
-    const result = await verifyToken(token, CONFIG, jwks);
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error.code).toBe("ALG_NOT_ALLOWED");
+    const hmacSecret = new TextEncoder().encode(await exportSPKI(key1.publicKey));
+    await rejects(await signToken({ alg: "HS256", key: hmacSecret }), "ALG_NOT_ALLOWED");
   });
 
   test("a wrong issuer is rejected", async () => {
-    const token = await new SignJWT({ fhirUser: FHIR_USER })
-      .setProtectedHeader({ alg: "RS256", kid: KID_1 })
-      .setIssuer("https://evil.synthetic.test/")
-      .setAudience(AUDIENCE)
-      .setSubject(SUBJECT)
-      .setExpirationTime("2h")
-      .sign(key1.privateKey);
-    const result = await verifyToken(token, CONFIG, jwks);
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error.code).toBe("CLAIM_INVALID");
+    await rejects(await signToken({ iss: "https://evil.synthetic.test/" }), "CLAIM_INVALID");
   });
 
   test("a wrong audience is rejected", async () => {
-    const token = await new SignJWT({ fhirUser: FHIR_USER })
-      .setProtectedHeader({ alg: "RS256", kid: KID_1 })
-      .setIssuer(ISSUER)
-      .setAudience("some-other-api")
-      .setSubject(SUBJECT)
-      .setExpirationTime("2h")
-      .sign(key1.privateKey);
-    const result = await verifyToken(token, CONFIG, jwks);
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error.code).toBe("CLAIM_INVALID");
+    await rejects(await signToken({ aud: "some-other-api" }), "CLAIM_INVALID");
   });
 
   test("an absent audience is rejected", async () => {
-    const token = await new SignJWT({ fhirUser: FHIR_USER })
-      .setProtectedHeader({ alg: "RS256", kid: KID_1 })
-      .setIssuer(ISSUER)
-      .setSubject(SUBJECT)
-      .setExpirationTime("2h")
-      .sign(key1.privateKey);
-    const result = await verifyToken(token, CONFIG, jwks);
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error.code).toBe("CLAIM_INVALID");
+    await rejects(await signToken({ aud: null }), "CLAIM_INVALID");
   });
 
   test("an expired token is rejected", async () => {
     const past = Math.floor(Date.now() / 1000) - ONE_HOUR_SECONDS;
-    const token = await new SignJWT({ fhirUser: FHIR_USER })
-      .setProtectedHeader({ alg: "RS256", kid: KID_1 })
-      .setIssuer(ISSUER)
-      .setAudience(AUDIENCE)
-      .setSubject(SUBJECT)
-      .setExpirationTime(past)
-      .sign(key1.privateKey);
-    const result = await verifyToken(token, CONFIG, jwks);
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error.code).toBe("TOKEN_EXPIRED");
+    await rejects(await signToken({ exp: past }), "TOKEN_EXPIRED");
   });
 
   test("an unknown kid is rejected (no JWKS match)", async () => {
-    const token = await new SignJWT({ fhirUser: FHIR_USER })
-      .setProtectedHeader({ alg: "RS256", kid: "kid-not-in-jwks" })
-      .setIssuer(ISSUER)
-      .setAudience(AUDIENCE)
-      .setSubject(SUBJECT)
-      .setExpirationTime("2h")
-      .sign(key1.privateKey);
-    const result = await verifyToken(token, CONFIG, jwks);
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error.code).toBe("JWKS_NO_MATCHING_KEY");
+    await rejects(await signToken({ kid: "kid-not-in-jwks" }), "JWKS_NO_MATCHING_KEY");
   });
 
   test("a verified token with no sub fails the claim-shape boundary", async () => {
-    const token = await new SignJWT({ fhirUser: FHIR_USER })
-      .setProtectedHeader({ alg: "RS256", kid: KID_1 })
-      .setIssuer(ISSUER)
-      .setAudience(AUDIENCE)
-      .setExpirationTime("2h")
-      .sign(key1.privateKey);
-    const result = await verifyToken(token, CONFIG, jwks);
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error.code).toBe("CLAIMS_SHAPE_INVALID");
+    await rejects(await signToken({ sub: null }), "CLAIMS_SHAPE_INVALID");
   });
 
   test("a garbage string is rejected as malformed (never throws)", async () => {
-    const result = await verifyToken("this.is.not-a-jwt", CONFIG, jwks);
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error.code).toBe("TOKEN_MALFORMED");
+    await rejects("this.is.not-a-jwt", "TOKEN_MALFORMED");
   });
 });

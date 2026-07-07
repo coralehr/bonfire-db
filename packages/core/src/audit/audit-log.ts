@@ -101,8 +101,13 @@ export async function appendAuditRowTx(
   ) {
     throw new Error("audit mis-attribution: receipt practice does not match the bound tenant");
   }
+  // ORDER BY is QUALIFIED (audit_log.seq) on purpose: the projection aliases
+  // `seq::text as seq`, and an unqualified `order by seq` would bind to that TEXT
+  // output column and sort lexicographically — so at >=10 rows the tip would read
+  // "9" as the max (…,"8","9","10","2"), collide on (practice_id, seq), and the
+  // chain would be stuck. Qualifying binds to the bigint column (numeric order).
   const tipRows =
-    await sql`select seq::text as seq, row_hash from audit_log order by seq desc limit 1`;
+    await sql`select seq::text as seq, row_hash from audit_log order by audit_log.seq desc limit 1`;
   let tipParsed: { seq: string; row_hash: string } | undefined;
   if (tipRows.length > 0) {
     const parsedTip = tipRowSchema.safeParse(tipRows[0]);

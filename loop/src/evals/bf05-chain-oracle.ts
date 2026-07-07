@@ -69,7 +69,7 @@ export async function oracleAppend(
     await sql`select pg_advisory_xact_lock(hashtext('bonfire.audit.chain'),
       hashtext(coalesce(current_setting('app.current_practice_id', true), '')))`;
     const tip = await sql`
-      select seq::text as seq, row_hash from audit_log order by seq desc limit 1`;
+      select seq::text as seq, row_hash from audit_log order by audit_log.seq desc limit 1`;
     const tipRow = tip[0] as { seq: string; row_hash: string } | undefined;
     const seq = tipRow === undefined ? "1" : (BigInt(tipRow.seq) + SEQ_STEP).toString();
     const prev = tipRow === undefined ? EVAL_GENESIS : tipRow.row_hash;
@@ -105,7 +105,7 @@ export async function oracleReadChain(app: postgres.Sql, practice: string): Prom
         resource_type, purpose_of_use, matched_rule_id, reason,
         to_char(occurred_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as occurred_at,
         prev_hash, row_hash
-      from audit_log order by seq asc`;
+      from audit_log order by audit_log.seq asc`;
     return rows as unknown as OracleRow[];
   });
 }
