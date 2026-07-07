@@ -27,6 +27,11 @@
       "outputs": ["coverage/**"],
       "env": ["DB_HOST_PORT", "DATABASE_URL", "MIGRATE_DATABASE_URL", "API_PORT"]
     },
+    "@bonfire/sql-on-fhir#test": {
+      "dependsOn": ["^build", "@bonfire/core#test", "@bonfire/api#test"],
+      "outputs": ["coverage/**"],
+      "env": ["DB_HOST_PORT", "DATABASE_URL", "MIGRATE_DATABASE_URL", "API_PORT"]
+    },
     "gate": {
       "dependsOn": ["typecheck", "lint", "test", "build"],
       "cache": false

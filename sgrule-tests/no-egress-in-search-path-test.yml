@@ -1,0 +1,61 @@
+# Behaviour tests for no-egress-in-search-path (ratchet BP-035). Run:
+# bunx ast-grep test --skip-snapshot-tests
+# Path scoping (files/ignores) does not apply to inline cases — these prove the
+# PATTERNS; the search-only + test-exempt scoping lives in the rule. Local
+# in-process inference (onnxruntime-node, @xenova/transformers) stays VALID: it
+# is the allowed self-hosted path (no off-box call). Every egress vector — a
+# network client, a raw node net core module, a hosted-model SDK (static/require/
+# dynamic import), and a fetch/WebSocket/EventSource call — is INVALID.
+id: no-egress-in-search-path
+valid:
+  - |
+    import { z } from "zod";
+  - |
+    import { createHash } from "node:crypto";
+  - |
+    import type { TenantSql } from "../db/tenant.js";
+  - |
+    const rows = await sql`select resource_id from search_doc order by embedding <=> ${qvec}::vector limit 40`;
+  - |
+    import { pipeline } from "@xenova/transformers";
+  - |
+    import * as ort from "onnxruntime-node";
+invalid:
+  - |
+    import http from "node:http";
+  - |
+    import https from "node:https";
+  - |
+    import net from "node:net";
+  - |
+    import tls from "node:tls";
+  - |
+    import dns from "node:dns";
+  - |
+    import http2 from "node:http2";
+  - |
+    import { spawn } from "node:child_process";
+  - |
+    import { request } from "undici";
+  - |
+    import axios from "axios";
+  - |
+    import OpenAI from "openai";
+  - |
+    import { HfInference } from "@huggingface/inference";
+  - |
+    const OpenAI = require("openai");
+  - |
+    const net = require("node:net");
+  - |
+    const { default: OpenAI } = await import("openai");
+  - |
+    const anthropic = await import("@anthropic-ai/sdk");
+  - |
+    const dns = await import("node:dns");
+  - |
+    const r = await fetch("https://api.openai.com/v1/embeddings");
+  - |
+    const r = await globalThis.fetch("https://collector.example", { body: text });
+  - |
+    const s = new WebSocket("wss://collector.example");

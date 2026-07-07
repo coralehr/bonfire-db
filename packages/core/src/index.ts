@@ -78,6 +78,23 @@ export type { ScribeInput, ScribeResourceType } from "./fhir/scribe-schemas.js";
 export { scribeInputSchema } from "./fhir/scribe-schemas.js";
 export type { BonfireError, Result } from "./result.js";
 export { err, ok } from "./result.js";
+export type { DerivedScope, ScopeSubject } from "./search/derive-scope.js";
+export { deriveScope, isSearchableType, SEARCHABLE_TYPES } from "./search/derive-scope.js";
+export { DEV_MODEL_ID, devEmbedder, isZeroEmbedding } from "./search/dev-embedder.js";
+export type { IndexErrorCode, IndexSummary } from "./search/index-doc.js";
+export { indexResourceTx } from "./search/index-doc.js";
+export type {
+  EmbeddingProvider,
+  ExcludedType,
+  RerankProvider,
+  SearchConfig,
+  SearchHit,
+  SearchInput,
+  SearchResponse
+} from "./search/schemas.js";
+export { EMBEDDING_DIM, searchInputSchema, searchResponseSchema } from "./search/schemas.js";
+export type { SearchErrorCode } from "./search/search-clinical.js";
+export { searchClinical } from "./search/search-clinical.js";
 export type { TerminologyConceptLookup } from "./terminology/bundled-pack-validator.js";
 export { createBundledPackValidator } from "./terminology/bundled-pack-validator.js";
 export { createSqlConceptLookup } from "./terminology/concept-lookup.js";

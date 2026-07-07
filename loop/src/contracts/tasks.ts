@@ -344,13 +344,30 @@ export const tasks: readonly SliceContract[] = [
     goal: "Add HYBRID cited search over the typed vd_* projections — a BM25 lexical arm and a pgvector (HNSW) semantic arm fused with Reciprocal Rank Fusion in SQL — that applies the ABAC + practice_id scope filter inside the retrieval query (scope-before-retrieve, default-deny), returning results where every hit carries a citation and freshness and the response carries excludedByPolicy, a structured policyReceipt, and an auditEventId. A cross-encoder reranker is a pluggable stage that is OFF by default; in the default config no embedding/rerank call leaves the tenant boundary (self-hosted open-weight models only — synthetic-only in dev).",
     why: "Cited search is the deterministic sub-5-minute wow and the safe read surface the agent depends on. Clinical retrieval needs BOTH modes by construction (exact codes/MRNs need lexical; paraphrased findings need vector), and adding the vector arm later is a migration, not a flag — so hybrid ships in v0. Pushing the scope/RLS filter into the retrieval query (never as a post-fetch app filter) and stamping every read with a policy receipt + audit id is what prevents cross-tenant and scope-after-retrieve leaks; keeping embeddings/rerank inside the boundary (no external PHI egress) is the security floor.",
     dependsOn: ["BF-04", "BF-05", "BF-13"],
+    // Operator prep (BF-06, disclosed) — the gate-base commit this slice builds
+    // ON carries the changes that live OFF the maker floor, so the maker diff
+    // (HEAD vs gate base) stays inside allowedPaths and the strict allowed-paths
+    // gate holds:
+    //   * drizzle/0009_search_doc.sql (+ meta/_journal) — the search_doc sidecar
+    //     (embedding vector(384) HNSW + generated content_tsv GIN, verbatim
+    //     FORCE-RLS + safe_uuid tenant policy, explicit S/I/U/D grant). Migrated
+    //     into the stack before the maker starts so the DB-backed search tests
+    //     compile/run against a ready `search_doc` at HEAD.
+    //   * sgrules/no-egress-in-search-path.yml (+ sgrule-tests) — the no-PHI-egress
+    //     guard acceptance #3 names (BP-035). Guard authorship is operator
+    //     territory (guard-selection principle), never maker scope.
+    // Contract-drift reconcile: the `loop/evals/retrieval/**` allowedPath was DEAD
+    // (GLOBAL_FORBIDDEN `loop/**` shadows it — forbidden wins) and is removed here;
+    // the 7 bf06-* Stage-2 evals are the operator POST-MERGE wave (loop/** is off
+    // the maker floor), matching every prior slice. `drizzle/**` stays listed but
+    // is operator-reserved for this slice (0009 is pre-landed; the maker authors
+    // no migration).
     allowedPaths: [
       "packages/core/src/search/**",
       "packages/core/src/index.ts",
       "packages/core/test/**",
       "drizzle/**",
-      "fixtures/synthetic/**",
-      "loop/evals/retrieval/**"
+      "fixtures/synthetic/**"
     ],
     forbiddenPaths: [
       "packages/core/src/abac/**",
