@@ -45,8 +45,15 @@ describe("BP-031: @bonfire/* type resolution is dist-independent", () => {
     expect(resolved).not.toMatch(/dist/);
   });
 
-  test("without the condition it would resolve to dist (the condition is load-bearing)", () => {
-    // The pre-fix state — this is why lint diverged from local to CI.
-    expect(resolve(undefined)).toMatch(/dist/);
+  test("without the condition, resolution never reaches src (the condition is load-bearing)", () => {
+    // The pre-fix state. Without the custom condition, @bonfire/core resolves to
+    // the dist target (when built) or fails to resolve (a no-build env like CI's
+    // test job) — either way NOT the src redirect, which is why lint diverged
+    // local vs CI. Asserting "not src" is itself dist-independent.
+    const withoutCondition = resolve(undefined);
+    const reachesSrc =
+      withoutCondition !== undefined &&
+      /packages[/\\]core[/\\]src[/\\]index\.ts$/.test(withoutCondition);
+    expect(reachesSrc).toBe(false);
   });
 });

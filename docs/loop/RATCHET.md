@@ -259,7 +259,7 @@
 
 - Symptom: Writing vd_*/spidx inside a /** block comment terminates the comment at the embedded */ and shreds the file into TS1434 parse errors — hit twice by the BF-04 maker and once by the operator in the close-out.
 - Root cause: The vd_* naming convention followed by a prose slash collides with the block-comment terminator; nothing lints comment bodies.
-- Fix: DONE: a self-testing lexer-level checker (scripts/check-comment-hazards.ts, package script check:comments, wired into BOTH the CI structural gate and the loop structural gate). It scans every tracked TS file with the TypeScript scanner and flags a MultiLineCommentTrivia that closed on a comment terminator immediately followed by an identifier char — the signature of an early-terminated comment. Globs inside string/template literals are invisible by construction (0 false positives over 225 files). The exported detector is pinned by a test; the script self-tests (exit 2) on every run.
+- Fix: DONE: a self-testing lexer-level checker (loop/src/gates/comment-hazards.ts, package script check:comments, wired into BOTH the CI structural gate and the loop structural gate). It scans every tracked TS file with the TypeScript scanner and flags a MultiLineCommentTrivia that closed on a comment terminator immediately followed by an identifier char — the signature of an early-terminated comment. Globs inside string/template literals are invisible by construction (0 false positives over 225 files). The exported detector is pinned by a test; the script self-tests (exit 2) on every run.
 - Guard: `test` → `loop/src/gates/comment-hazards.test.ts::BP-032: block-comment terminator hazard detector`
 - Recorded: 2026-07-04
 

@@ -7,7 +7,7 @@
  * string literals — the scanner is blind to strings, so this file is safe.
  */
 import { describe, expect, test } from "bun:test";
-import { findCommentHazards } from "../../../scripts/check-comment-hazards.js";
+import { findCommentHazards } from "./comment-hazards.js";
 
 describe("BP-032: block-comment terminator hazard detector", () => {
   test("flags a projection-prefix slash that ends the comment early", () => {

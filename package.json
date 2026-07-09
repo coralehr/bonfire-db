@@ -29,7 +29,7 @@
     "scan:synthetic": "bun run scripts/synthetic-scan/index.ts",
     "gen:agents": "bun run loop/src/agents/write.ts",
     "loop": "bun run loop/src/cli/bin.ts",
-    "check:comments": "bun run scripts/check-comment-hazards.ts"
+    "check:comments": "bun run loop/src/gates/comment-hazards.ts"
   },
   "devDependencies": {
     "@ast-grep/cli": "^0.44.0",

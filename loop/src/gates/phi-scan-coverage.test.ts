@@ -29,7 +29,9 @@ function gitLsFiles(): string[] {
 }
 
 function sweptTargets(): string[] {
-  return execFileSync("bun", ["scripts/synthetic-scan/index.ts", "--list-targets"], {
+  // Via the package script (not a literal script path) so the scanner stays the
+  // one declared entrypoint — knip sees no phantom binary, and the boundary holds.
+  return execFileSync("bun", ["run", "scan:synthetic", "--list-targets"], {
     cwd: repoRoot,
     encoding: "utf8"
   })
