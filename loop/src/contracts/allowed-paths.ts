@@ -53,6 +53,11 @@ export const GLOBAL_FORBIDDEN_PATHS: readonly string[] = [
   "sgrules/**",
   ".gitleaks.toml",
   "tsconfig.base.json",
+  // The PHI tripwire's own internals (BP-022): a slice maker who could edit the
+  // scanner's scope, detectors, or baseline could quietly narrow coverage or
+  // allowlist a real finding while the run stays green. Only operator prep (which
+  // runs off-floor, pre-base) may change how the repo scans itself for PHI.
+  "scripts/synthetic-scan/**",
   // The SQL-on-FHIR conformance TRUST ROOT (BP-030): the manifest pins the
   // vendored suite bytes, the case counts, and the shareable pass floor. A
   // maker who can edit it can downgrade regressed cases into the allowlist

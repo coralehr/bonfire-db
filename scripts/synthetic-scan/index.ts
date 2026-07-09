@@ -1,29 +1,31 @@
 /**
- * Semantic synthetic-only scanner CLI (BF-02 tripwire).
+ * Semantic synthetic-only scanner CLI (BF-02 tripwire) — DENY-BY-DEFAULT (BP-022).
  *
- *   bun run scan:synthetic          self-test on the planted fixture, then
- *                                   scan fixtures/synthetic/** (fixture excluded)
+ *   bun run scan:synthetic          self-test on the planted corpus, then sweep
+ *                                   EVERY tracked text file (reviewed carve-outs only)
  *   bun run scan:synthetic <paths>  scan explicit repo-relative paths instead
  *                                   (pointing it at the planted fixture must exit 1)
  *
- * Exit contract: 0 = clean, 1 = findings, 2 = operational error. The self-test
- * runs FIRST on every invocation and exits 2 unless every signal class fires —
- * the scan can only ever pass after proving the tripwire is alive. A crash can
- * never exit 0.
+ * Two-tier detection: files that parse as JSON/NDJSON get the FHIR field-aware
+ * detectors (unless FIELD_AWARE_EXEMPT); every text file also gets a text-mode
+ * dashed-SSN pass. Exit contract: 0 = clean, 1 = findings, 2 = operational error.
+ * The self-test runs FIRST and exits 2 unless every signal class fires — a scan
+ * can only pass after proving the tripwire is alive; a crash never exits 0.
  */
-import { readdirSync, readFileSync } from "node:fs";
-import { dirname, extname, join, relative, resolve } from "node:path";
+import { execFileSync } from "node:child_process";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { fingerprintOf, loadBaseline } from "./baseline.js";
 import {
   BASELINE_FILE,
-  EXCLUDED_FILES,
-  PLANTED_FIXTURE,
-  SCAN_EXTENSIONS,
-  SCAN_ROOTS
+  EXCLUDED_PATHS,
+  FIELD_AWARE_EXEMPT,
+  PLANTED_FIXTURE_DIR,
+  type ScopeEntry
 } from "./config.js";
 import type { Finding } from "./detectors.js";
-import { ALL_RULES, isPlainObject, scanResource } from "./detectors.js";
+import { ALL_RULES, isPlainObject, scanResource, scanText } from "./detectors.js";
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const EXIT_CLEAN = 0;
@@ -36,9 +38,44 @@ interface FileFinding {
   readonly finding: Finding;
 }
 
-interface ParsedResource {
-  readonly resource: Record<string, unknown>;
-  readonly pointer: string;
+/** repo-relative path is under (or equals) a carve-out entry. */
+function matches(rel: string, entries: readonly ScopeEntry[]): boolean {
+  return entries.some((e) => rel === e.path || rel.startsWith(`${e.path}/`));
+}
+
+// JSON.parse error messages embed a snippet of the source text; the scanner is
+// pointed at SUSPECT content, so a parse of a NON-JSON file must never surface it.
+function tryParseResources(text: string, isNdjson: boolean): Record<string, unknown>[] {
+  const out: Record<string, unknown>[] = [];
+  try {
+    if (isNdjson) {
+      for (const line of text.split("\n")) {
+        if (line.trim().length === 0) continue;
+        const raw: unknown = JSON.parse(line);
+        if (isPlainObject(raw)) out.push(raw);
+      }
+      return out;
+    }
+    const raw: unknown = JSON.parse(text);
+    if (isPlainObject(raw)) out.push(raw);
+  } catch {
+    return []; // not JSON -> text-mode only, no field-aware pass
+  }
+  return out;
+}
+
+/** Scan one file: text-mode dashed-SSN always; FHIR field-aware when requested + parseable. */
+function scanOneFile(fileAbs: string, fieldAware: boolean): Finding[] {
+  const buf = readFileSync(fileAbs);
+  if (buf.includes(0)) return []; // binary (null byte) — skip
+  const text = buf.toString("utf8");
+  const findings: Finding[] = [...scanText(text)];
+  if (fieldAware) {
+    for (const resource of tryParseResources(text, fileAbs.endsWith(".ndjson"))) {
+      findings.push(...scanResource(resource, ""));
+    }
+  }
+  return findings;
 }
 
 function listFilesUnder(dirAbs: string): string[] {
@@ -51,72 +88,89 @@ function listFilesUnder(dirAbs: string): string[] {
   return files.sort();
 }
 
-function parseObject(raw: unknown, context: string): Record<string, unknown> {
-  if (!isPlainObject(raw)) throw new Error(`${context} is not a JSON object`);
-  return raw;
-}
-
-// JSON.parse error messages embed a snippet of the source text. The scanner is
-// pointed at SUSPECT files, so that snippet could be a real identifier — parse
-// failures must surface the location only, never the content.
-function parseJsonRedacted(text: string, where: string): unknown {
-  try {
-    return JSON.parse(text) as unknown;
-  } catch {
-    throw new Error(`invalid JSON in ${where} (content not shown)`);
+/** Every tracked text file the sweep covers (deny-by-default minus EXCLUDED_PATHS + binary). */
+export function enumerateTargets(): string[] {
+  const tracked = execFileSync("git", ["ls-files", "-z"], {
+    cwd: REPO_ROOT,
+    encoding: "utf8"
+  })
+    .split("\0")
+    .filter((f) => f.length > 0);
+  const targets: string[] = [];
+  for (const rel of tracked) {
+    if (matches(rel, EXCLUDED_PATHS)) continue;
+    const abs = join(REPO_ROOT, rel);
+    // git ls-files lists a locally deleted-but-unstaged path; skip if absent
+    // (CI's clean checkout never hits this).
+    if (!existsSync(abs)) continue;
+    if (readFileSync(abs).includes(0)) continue; // binary (null byte)
+    targets.push(rel);
   }
+  return targets.sort();
 }
 
-function parseResources(fileAbs: string): ParsedResource[] {
-  const text = readFileSync(fileAbs, "utf8");
-  const parsed: ParsedResource[] = [];
-  if (fileAbs.endsWith(".ndjson")) {
-    text.split("\n").forEach((line, index) => {
-      if (line.trim().length === 0) return;
-      const raw = parseJsonRedacted(line, `${fileAbs}:${String(index + 1)}`);
-      parsed.push({
-        resource: parseObject(raw, `${fileAbs}:${String(index + 1)}`),
-        pointer: `/${String(index)}`
-      });
-    });
-    return parsed;
-  }
-  const raw = parseJsonRedacted(text, fileAbs);
-  return [{ resource: parseObject(raw, fileAbs), pointer: "" }];
-}
-
-function scanFiles(filesAbs: readonly string[]): FileFinding[] {
+function sweep(): FileFinding[] {
   const results: FileFinding[] = [];
-  for (const fileAbs of filesAbs) {
-    const file = relative(REPO_ROOT, fileAbs);
-    for (const { resource, pointer } of parseResources(fileAbs)) {
-      for (const finding of scanResource(resource, pointer)) {
-        results.push({ file, finding });
-      }
+  for (const rel of enumerateTargets()) {
+    const fieldAware = !matches(rel, FIELD_AWARE_EXEMPT);
+    for (const finding of scanOneFile(join(REPO_ROOT, rel), fieldAware)) {
+      results.push({ file: rel, finding });
     }
   }
   return results;
 }
 
-/** Every signal class must fire on the planted fixture; returns the misses. */
+/** Every signal class must fire on the planted corpus (json + txt); returns the misses. */
 function selfTestMissingRules(): string[] {
-  const fired = new Set(
-    scanFiles([join(REPO_ROOT, PLANTED_FIXTURE)]).map(({ finding }) => finding.rule)
-  );
+  const fired = new Set<string>();
+  for (const fileAbs of listFilesUnder(join(REPO_ROOT, PLANTED_FIXTURE_DIR))) {
+    for (const finding of scanOneFile(fileAbs, true)) {
+      fired.add(finding.rule);
+    }
+  }
   return ALL_RULES.filter((rule) => !fired.has(rule));
 }
 
-function defaultTargets(): string[] {
-  const targets: string[] = [];
-  for (const root of SCAN_ROOTS) {
-    for (const fileAbs of listFilesUnder(join(REPO_ROOT, root))) {
-      const rel = relative(REPO_ROOT, fileAbs);
-      if (EXCLUDED_FILES.includes(rel)) continue;
-      if (!SCAN_EXTENSIONS.includes(extname(fileAbs))) continue;
-      targets.push(fileAbs);
+// JSON.parse error messages embed a snippet of the source text (BP-017). When the
+// caller EXPLICITLY names a file as a resource to scan, malformed JSON is a real
+// operational error — surface the LOCATION only, never the content.
+function parseResourcesStrict(
+  text: string,
+  isNdjson: boolean,
+  where: string
+): Record<string, unknown>[] {
+  const out: Record<string, unknown>[] = [];
+  const lines = isNdjson ? text.split("\n") : [text];
+  lines.forEach((line, index) => {
+    if (isNdjson && line.trim().length === 0) return;
+    let raw: unknown;
+    try {
+      raw = JSON.parse(line);
+    } catch {
+      const at = isNdjson ? `${where}:${String(index + 1)}` : where;
+      throw new Error(`invalid JSON in ${at} (content not shown)`);
     }
+    if (isPlainObject(raw)) out.push(raw);
+  });
+  return out;
+}
+
+/** Explicit-path mode: text-mode always + STRICT field-aware (malformed JSON -> redacted error). */
+function scanExplicit(paths: readonly string[]): FileFinding[] {
+  const results: FileFinding[] = [];
+  for (const arg of paths) {
+    const fileAbs = resolve(REPO_ROOT, arg);
+    const rel = relative(REPO_ROOT, fileAbs);
+    const buf = readFileSync(fileAbs);
+    if (buf.includes(0)) continue;
+    const text = buf.toString("utf8");
+    const findings: Finding[] = [...scanText(text)];
+    for (const resource of parseResourcesStrict(text, fileAbs.endsWith(".ndjson"), rel)) {
+      findings.push(...scanResource(resource, ""));
+    }
+    for (const finding of findings) results.push({ file: rel, finding });
   }
-  return targets;
+  return results;
 }
 
 function reportFindings(findings: readonly FileFinding[]): void {
@@ -129,6 +183,12 @@ function reportFindings(findings: readonly FileFinding[]): void {
 
 function main(argv: readonly string[]): number {
   try {
+    // Coverage introspection for the BP-022 guard: print the exact swept set so a
+    // test can assert `git ls-files` minus this equals only the reviewed carve-outs.
+    if (argv[0] === "--list-targets") {
+      process.stdout.write(`${enumerateTargets().join("\n")}\n`);
+      return EXIT_CLEAN;
+    }
     const missing = selfTestMissingRules();
     if (missing.length > 0) {
       console.error(`self-test FAILED — classes missing: ${missing.join(", ")}`);
@@ -136,17 +196,15 @@ function main(argv: readonly string[]): number {
     }
     const total = ALL_RULES.length;
     console.log(`self-test: ${String(total)}/${String(total)} signal classes fired`);
-    const explicit = argv.map((arg) => resolve(REPO_ROOT, arg));
-    const targets = explicit.length > 0 ? explicit : defaultTargets();
+    const raw = argv.length > 0 ? scanExplicit(argv) : sweep();
+    const scannedCount = argv.length > 0 ? argv.length : enumerateTargets().length;
     const baseline = loadBaseline(join(REPO_ROOT, BASELINE_FILE));
-    const findings = scanFiles(targets).filter(
-      ({ file, finding }) => !baseline.has(fingerprintOf(file, finding))
-    );
+    const findings = raw.filter(({ file, finding }) => !baseline.has(fingerprintOf(file, finding)));
     if (findings.length > 0) {
       reportFindings(findings);
       return EXIT_FINDINGS;
     }
-    console.log(`scan:synthetic clean — ${String(targets.length)} file(s) scanned, 0 findings`);
+    console.log(`scan:synthetic clean — ${String(scannedCount)} file(s) scanned, 0 findings`);
     return EXIT_CLEAN;
   } catch (cause) {
     const detail = cause instanceof Error ? cause.message : "unknown failure";
@@ -155,4 +213,6 @@ function main(argv: readonly string[]): number {
   }
 }
 
-process.exitCode = main(process.argv.slice(2));
+if (import.meta.main) {
+  process.exitCode = main(process.argv.slice(2));
+}

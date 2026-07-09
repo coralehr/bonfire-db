@@ -125,7 +125,7 @@ export async function insertCorpusResources(
       insert into fhir_resources (id, type, practice_id, version_id, last_updated, content)
       values (${resource.id}, ${resource.type}, ${practiceId}, 1, now(),
         ${sql.json(resource.content)})
-      on conflict (id) do nothing
+      on conflict (practice_id, id) do nothing
       returning id`;
     if (rows.length === 0) {
       skipped += 1;

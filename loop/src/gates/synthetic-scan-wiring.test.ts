@@ -18,16 +18,20 @@ const CANONICAL_RULES = [
   "phone-nanp",
   "npi-luhn",
   "mrn-system",
-  "compound-identity"
+  "compound-identity",
+  "ssn-text"
 ];
 
 describe("synthetic-only tripwire wiring", () => {
-  test("SCAN_ROOTS still covers the synthetic fixture corpus", () => {
-    const config = read("scripts/synthetic-scan/config.ts");
-    expect(config).toContain('"fixtures/synthetic"');
-    // A narrowed-to-empty SCAN_ROOTS would sweep nothing while the self-test
-    // stays green on its hardcoded planted fixture.
-    expect(config).not.toMatch(/SCAN_ROOTS[^=]*=\s*\[\s*\]/);
+  test("the scanner sweeps deny-by-default (git ls-files), not a shrinkable allowlist", () => {
+    // BP-022: scope is every tracked file minus a reviewed carve-out, so a new
+    // dir/extension is covered automatically. The old narrowable SCAN_ROOTS
+    // allowlist is gone; coverage is pinned exactly by phi-scan-coverage.test.ts.
+    const index = read("scripts/synthetic-scan/index.ts");
+    expect(index).toContain("git");
+    expect(index).toContain("ls-files");
+    expect(index).toContain("enumerateTargets");
+    expect(read("scripts/synthetic-scan/config.ts")).not.toContain("SCAN_ROOTS");
   });
 
   test("every canonical detector class is still registered in ALL_RULES", () => {

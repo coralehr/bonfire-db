@@ -1,34 +1,44 @@
 /**
- * BF-02 seeded-state proofs — run AFTER `bun run seed` (the verify order).
+ * BF-02 seed ⇄ manifest contract — HERMETIC (BP-024).
  *
- * Asserts the manifest ⇄ database contract for BOTH fixed seed practices:
- * counts match the manifest exactly (idempotent — a second seed run must not
- * change them), write_inputs parity holds 1:1, and the completion marker
- * carries the manifest hash the seed honored.
+ * The predecessor (packages/core/src/db/seeded-state.test.ts) asserted seed row
+ * counts but never seeded: green locally only because the operator ran `bun run
+ * seed` first, red on a fresh CI runner that only migrated. This lives in the
+ * seed workspace (which owns the seeder — no core→seed dependency cycle) and
+ * self-provisions via seedIfNeeded() in beforeAll, so it depends on nothing but a
+ * migrated database. seedIfNeeded is idempotent + advisory-locked, so a boot-time
+ * `bun run seed` and this beforeAll compose without a race.
+ *
+ * Asserts for BOTH fixed practices: counts match the manifest exactly, write_inputs
+ * parity holds 1:1, and the completion marker carries the manifest hash.
  */
-import { afterAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { canonicalizeJson } from "./canonical-json.js";
-import { createSqlClient } from "./client.js";
-import { resolveDatabaseTarget } from "./env.js";
-import { createTenantDb } from "./tenant.js";
+import { canonicalizeJson, connectTenantDb } from "@bonfire/core";
+import { seedIfNeeded } from "./index.js";
 
-const MANIFEST_URL = new URL(
-  "../../../../fixtures/synthetic/corpus.manifest.json",
-  import.meta.url
-);
-const manifest = JSON.parse(readFileSync(MANIFEST_URL, "utf8"));
+const MANIFEST_URL = new URL("../fixtures/synthetic/corpus.manifest.json", import.meta.url);
+const manifest = JSON.parse(readFileSync(MANIFEST_URL, "utf8")) as {
+  practices: string[];
+  files: { resourceType: string; count: number }[];
+};
 const practices = manifest.practices;
 const expectedTotal = manifest.files.reduce((sum, file) => sum + file.count, 0);
 const expectedManifestHash = createHash("sha256")
   .update(canonicalizeJson(manifest), "utf8")
   .digest("hex");
 
-const sql = createSqlClient(resolveDatabaseTarget(), { max: 1 });
-const db = createTenantDb(sql);
+const db = connectTenantDb();
 
-async function seededState(practiceId: string) {
+interface SeededState {
+  totals: { latest: number; history: number; inputs: number } | undefined;
+  byType: { type: string; n: number }[];
+  markers: { manifest_hash: string }[];
+  orphans: number | undefined;
+}
+
+async function seededState(practiceId: string): Promise<SeededState> {
   const result = await db.withTenant(practiceId, async (sql) => {
     const totals = await sql<{ latest: number; history: number; inputs: number }[]>`
       select (select count(*)::int from fhir_resources) as latest,
@@ -53,11 +63,15 @@ async function seededState(practiceId: string) {
   return result.data;
 }
 
+beforeAll(async () => {
+  await seedIfNeeded();
+});
+
 afterAll(async () => {
   await db.end();
 });
 
-describe("seed ⇄ manifest contract (both fixed practices)", () => {
+describe("seed ⇄ manifest contract (both fixed practices, self-seeded)", () => {
   test("marker honored, counts match manifest", async () => {
     expect(practices.length).toBe(2);
     for (const practiceId of practices) {

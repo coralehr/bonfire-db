@@ -42,6 +42,11 @@ async function seedPractice(
   hash: string
 ): Promise<SeedOutcome> {
   const result = await db.withTenant(practiceId, async (sql): Promise<SeedOutcome> => {
+    // BP-024: serialize concurrent seeders (parallel test suites self-seeding on
+    // one DB) so both don't pass the marker-empty check and race the marker's
+    // UNIQUE(practice_id, manifest_hash) into a spurious rollback. Transaction-
+    // scoped, auto-released at commit; the loser then sees the marker and no-ops.
+    await sql`select pg_advisory_xact_lock(hashtext('bonfire.seed'), hashtext(${practiceId}))`;
     const markerRows = await sql`select manifest_hash from seed_completions`;
     const markers = markerRowsSchema.parse([...markerRows]);
     if (markers.some((marker) => marker.manifest_hash === hash)) return { status: "noop" };
@@ -152,6 +157,23 @@ async function seedAllPractices(manifest: CorpusManifest): Promise<number> {
   return 0;
 }
 
+/**
+ * BP-024 hermetic-test entrypoint: seed both fixed practices idempotently,
+ * throwing on drift/failure. Safe to call from a DB test's beforeAll — the marker
+ * check makes it a no-op once seeded and the advisory lock makes concurrent
+ * callers safe, so a test never depends on `bun run seed` having run in boot.
+ */
+export async function seedIfNeeded(): Promise<void> {
+  const manifestResult = loadManifest(MANIFEST_PATH);
+  if (!manifestResult.ok) {
+    throw new Error(
+      `seedIfNeeded: manifest ${manifestResult.error.code} — ${manifestResult.error.message}`
+    );
+  }
+  const exit = await seedAllPractices(manifestResult.data);
+  if (exit !== 0) throw new Error("seedIfNeeded: seed did not complete cleanly (see logs above)");
+}
+
 async function main(argv: readonly string[]): Promise<number> {
   try {
     const manifestResult = loadManifest(MANIFEST_PATH);
@@ -172,4 +194,8 @@ async function main(argv: readonly string[]): Promise<number> {
   }
 }
 
-process.exitCode = await main(process.argv.slice(2));
+// Only run the CLI when executed directly — importing seedIfNeeded (e.g. from a
+// hermetic test's beforeAll) must not trigger a seed run as an import side effect.
+if (import.meta.main) {
+  process.exitCode = await main(process.argv.slice(2));
+}

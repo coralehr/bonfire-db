@@ -1,0 +1,2 @@
+planted non-JSON bait for the text-mode dashed-SSN detector (BP-022 self-test).
+patient row: id=row-1 ssn=123-45-6789

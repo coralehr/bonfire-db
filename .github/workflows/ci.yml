@@ -63,6 +63,9 @@ jobs:
               # ast-grep doubles as a slop gate: validate the rules, then scan.
               bunx ast-grep test --skip-snapshot-tests
               bunx ast-grep scan
+              # BP-032: block-comment terminator hazard (lexer-level; AST tools
+              # can't see it once the file stops parsing). Self-tests on run.
+              bun run check:comments
               ;;
             boundaries)
               DIRS=""

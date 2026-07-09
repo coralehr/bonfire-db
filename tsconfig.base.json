@@ -6,6 +6,7 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "moduleDetection": "force",
+    "customConditions": ["@bonfire/source"],
     "types": ["node"],
 
     "strict": true,
