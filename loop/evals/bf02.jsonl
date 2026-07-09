@@ -1,1 +1,2 @@
 {"id":"bf02-scanner-error-redacts-content","slice":"BF-02","traces":"BP-017","run":{"command":["bun","loop/src/evals/scanner-redaction.ts"]}}
+{"id":"bf02-tenant-id-namespace","slice":"BF-02","traces":"BP-019 (unique-constraint existence oracle; migration 0010 tenant-scoped keys). Behavioral: cross-tenant same-id insert transfers zero bits. Structural: every unique index on an app-insertable FORCE-RLS table is tenant-scoped or server-generated.","run":{"command":["bun","loop/src/evals/bf02-tenant-id-namespace.ts"]}}

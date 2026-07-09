@@ -168,7 +168,9 @@ export const STANDARD_GATES: readonly Gate[] = [
     tier: "blocking",
     commands: [
       ["bunx", "ast-grep", "test", "--skip-snapshot-tests"],
-      ["bunx", "ast-grep", "scan"]
+      ["bunx", "ast-grep", "scan"],
+      // BP-032: block-comment terminator hazard (lexer-level, self-testing).
+      ["bun", "run", "check:comments"]
     ]
   }),
   BOUNDARIES_GATE,

@@ -27,7 +27,8 @@ export type RuleId =
   | "phone-nanp"
   | "npi-luhn"
   | "mrn-system"
-  | "compound-identity";
+  | "compound-identity"
+  | "ssn-text";
 
 export const ALL_RULES: readonly RuleId[] = [
   "name-marker",
@@ -35,8 +36,27 @@ export const ALL_RULES: readonly RuleId[] = [
   "phone-nanp",
   "npi-luhn",
   "mrn-system",
-  "compound-identity"
+  "compound-identity",
+  "ssn-text"
 ];
+
+const DASHED_SSN = /\b\d{3}-\d{2}-\d{4}\b/g;
+
+/**
+ * Text-mode (BP-022): a structurally valid dashed SSN anywhere in a file's raw
+ * text, for NON-JSON files (.csv/.md/.sql/.ts/seed literals) the field-aware
+ * detectors can't parse. Near-zero false positives — a valid xxx-xx-xxxx rarely
+ * occurs by accident, and isStructurallyValidSsn filters the never-issued ranges.
+ */
+export function scanText(text: string): Finding[] {
+  const out: Finding[] = [];
+  for (const match of text.matchAll(DASHED_SSN)) {
+    if (isStructurallyValidSsn(match[0])) {
+      out.push({ rule: "ssn-text", pointer: "", valueSha256: sha256Hex(match[0]) });
+    }
+  }
+  return out;
+}
 
 export interface Finding {
   readonly rule: RuleId;

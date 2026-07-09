@@ -108,7 +108,7 @@ describe("one atomic write path", () => {
     await expectPoolHealthy();
   });
 
-  test("duplicate history version is rejected by PK (id, version_id) (23505)", async () => {
+  test("duplicate history version is rejected by PK (practice_id, id, version_id) (23505)", async () => {
     const id = randomUUID();
     const content = { resourceType: "Patient", id };
     let dupState: string | undefined;

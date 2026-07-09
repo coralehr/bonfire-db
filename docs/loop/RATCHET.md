@@ -5,7 +5,7 @@
 > `loop ratchet` (and the test suite): if the guard artifact disappears,
 > the check fails and the bug is considered reopened.
 
-30 guarded · 6 open (debt owed a guard)
+35 guarded · 1 open (debt owed a guard)
 
 ## BP-001 — gate-crash-read-as-pass — GUARDED
 
@@ -151,12 +151,12 @@
 - Guard: `test` → `packages/core/src/db/fhir-rls.test.ts::BP-018 posture`
 - Recorded: 2026-07-03
 
-## BP-019 — unique-constraint-existence-oracle — OPEN
+## BP-019 — unique-constraint-existence-oracle — GUARDED
 
 - Symptom: PK/UNIQUE/FK enforcement bypasses RLS by design: a caller supplying its own resource id gets a distinguishable failure when that id exists in ANOTHER practice — a cross-tenant id-existence probe and an id-squatting DoS (ids only, never content; random UUIDs make blind probing infeasible).
 - Root cause: fhir_resources uses a global PRIMARY KEY (id) + UNIQUE (type,id); uniqueness errors are constraint-level, beneath the RLS policy filter.
-- Fix: Deferred by decision: tenant-scoped composite keys (PK (practice_id,id)) or normalized 23505 handling on insert — decide with BF-04's projection identity design; danger is LOW while ids are server-generated UUIDs.
-- Planned guard: eval (H5): unique-constraint existence-oracle case — a practice-B insert with practice-A's id must be indistinguishable from any other failed insert
+- Fix: DONE (migration 0010): tenant-scoped identity. fhir_resources PK (id)->(practice_id,id); history PK ->(practice_id,id,version_id); write_inputs UNIQUE(fhir_resource_id)->(practice_id,fhir_resource_id) with a COMPOSITE FK to fhir_resources(practice_id,id). Every uniqueness scope on a client-influenceable value now leads with practice_id, so a cross-tenant duplicate id SUCCEEDS as the caller's own row (probe transfers zero bits) and the RLS-bypassing FK check cannot see across tenants. Server-generated UUIDv4 ids kept (no uuidv7 timestamp leak); seed on-conflict arm re-targeted to (practice_id,id).
+- Guard: `eval` → `loop/evals/bf02.jsonl::bf02-tenant-id-namespace`
 - Recorded: 2026-07-03
 
 ## BP-020 — sql-gate-denylist-evasion — GUARDED
@@ -172,15 +172,15 @@
 - Symptom: The synthetic-only scanner self-tests detector classes on a HARDCODED planted fixture, decoupled from the sweep set — so emptying SCAN_ROOTS, dropping a class from ALL_RULES, or deleting the scanner (behind a fail-open CI `if [ -f ]` guard) leaves the run green while sweeping nothing (proven: SCAN_ROOTS=[] exits 0).
 - Root cause: Self-test coverage != scan coverage, and the scanner's config (scripts/**) sits outside GLOBAL_FORBIDDEN_PATHS, so a future maker could narrow scope and pass allowed-paths too; CI's only tripwire enforcement was one fail-open-guarded step.
 - Fix: synthetic-scan-wiring pin test (runs in CI build-test via turbo test) asserts SCAN_ROOTS non-empty + covers fixtures/synthetic, ALL_RULES has all 6 canonical classes, the scan:synthetic script + loop gate + CI step exist; the CI scan and semgrep --test steps made unconditional (deletion is now a red check). Residual (open [[BP-022]]): scan EXTENSION/ROOT scope is narrow (.ndjson/.json under fixtures/synthetic only) and baseline.json is same-commit-forgeable-with-review; scripts/synthetic-scan/** not yet on the allowed-paths floor.
-- Guard: `test` → `loop/src/gates/synthetic-scan-wiring.test.ts::SCAN_ROOTS still covers the synthetic fixture corpus`
+- Guard: `test` → `loop/src/gates/synthetic-scan-wiring.test.ts::the scanner sweeps deny-by-default (git ls-files), not a shrinkable allowlist`
 - Recorded: 2026-07-03
 
-## BP-022 — phi-tripwire-scope-narrow — OPEN
+## BP-022 — phi-tripwire-scope-narrow — GUARDED
 
 - Symptom: PHI-shaped data can land undetected outside the scanner's narrow scope: a non-.ndjson/.json file inside fixtures/synthetic (e.g. .csv), or any file under seed/ inline literals, tests/, docs/, or a new fixtures/ subdir, is swept by NO gate (gitleaks=secrets, semgrep=SQL/authz — neither detects PHI names/MRNs/DOBs). baseline.json entries are forgeable in the same commit (visible-but-reviewed suppression).
 - Root cause: SCAN_ROOTS + SCAN_EXTENSIONS are minimal for BF-02's corpus; the tripwire guarantees less than 'no PHI can land'.
-- Fix: (deferred) broaden SCAN_ROOTS/EXTENSIONS as later slices add fixture surfaces (BF-03 fixtures/golden, BF-11 benchmark corpus); add scripts/synthetic-scan/** to GLOBAL_FORBIDDEN_PATHS; make baseline additions require a separate reviewer signal.
-- Planned guard: per-slice SCAN_ROOTS expansion + allowed-paths floor for the scanner internals + baseline provenance check (queue across BF-03/BF-11)
+- Fix: DONE: the scanner is DENY-BY-DEFAULT (git ls-files minus a reviewed EXCLUDED_PATHS carve-out, binaries skipped by null-byte sniff), two-tier: JSON/NDJSON content -> field-aware FHIR detectors (unless FIELD_AWARE_EXEMPT: vendored/canonical HL7 corpora whose example names aren't our digit-marker convention, measured to carry no SSN/NPI/phone); every text file -> text-mode dashed-SSN via the strict validator (near-zero FP, 0 across 389 tracked files). Each carve-out carries a reason. scripts/synthetic-scan/** added to GLOBAL_FORBIDDEN_PATHS so a slice maker cannot narrow the scanner; planted.csv exercises the non-JSON path in the self-test. Residual follow-up: merge-base baseline-provenance (same-commit self-approval) — baseline is empty today and every entry already needs reason+added_by.
+- Guard: `test` → `loop/src/gates/phi-scan-coverage.test.ts::BP-022: PHI scanner coverage is deny-by-default`
 - Recorded: 2026-07-03
 
 ## BP-023 — new-workspace-missing-from-dockerfile — GUARDED
@@ -191,12 +191,12 @@
 - Guard: `test` → `loop/src/gates/docker-invariants.test.ts::every root workspace manifest (globs expanded) is COPYed for install`
 - Recorded: 2026-07-03
 
-## BP-024 — db-test-depends-on-unrun-boot-step — OPEN
+## BP-024 — db-test-depends-on-unrun-boot-step — GUARDED
 
 - Symptom: seeded-state.test.ts asserts seed row counts but does not seed; it passed locally (operator ran `bun run seed` first per the verify[] order) and failed in CI, whose generic `turbo run test` boot only migrated. Green locally, red on a fresh CI runner.
 - Root cause: A DB-backed test carried an implicit precondition (the seed having run) that it did not establish itself, so correctness depended on the runner's boot order rather than the test.
-- Fix: CI boot step now mirrors the slice verify[] order (migrate then seed) so the DB-backed tests run against the same synthetic state the contract establishes. The durable fix — make DB-backed tests self-seed (hermetic) so no bare `bun test` depends on boot order — is owed.
-- Planned guard: hermetic DB tests: a shared test-setup that seeds idempotently in beforeAll (or moves the seed-contract test into the seed workspace where it can import + run the seeder), so ordering is never implicit — build with BF-03's write-path tests
+- Fix: DONE: the seed-contract exhibit moved to seed/seeded-state.test.ts (the seed workspace owns the seeder — no core->seed cycle) and self-provisions via an exported, idempotent, advisory-locked seedIfNeeded() in beforeAll — proven to pass against a MIGRATE-ONLY DB. seed/index.ts CLI now guarded by import.meta.main so importing the seeder has no side effect. The remaining projection/terminology-dependent suites rely on the CI boot chain (migrate->seed->fhir:load-terminology->projections:rebuild BEFORE the test task), now pinned so it cannot silently lose a step (the recorded failure); full per-suite hermeticity is a scoped follow-up.
+- Guard: `test` → `loop/src/gates/hermetic-tests-wiring.test.ts::BP-024: DB tests do not depend on an unrun boot step`
 - Recorded: 2026-07-03
 
 ## BP-025 — synthetic-fixtures-gitignored — GUARDED
@@ -247,20 +247,20 @@
 - Guard: `test` → `loop/src/contracts/allowed-paths.test.ts::fixtures/sql-on-fhir/MANIFEST.json`
 - Recorded: 2026-07-04
 
-## BP-031 — dist-dependent-lint-resolution — OPEN
+## BP-031 — dist-dependent-lint-resolution — GUARDED
 
 - Symptom: eslint was green locally but red in CI (18 no-unsafe-* errors in scripts/sql-on-fhir): package-name imports of @bonfire/core type-resolve via the exports map to dist/index.d.ts, which existed locally after any tsc -b but not in CI's no-build lint job, so the dependent type graph collapsed to error-typed.
 - Root cause: Consumer tsconfigs without project references get no source redirect for referenced composite packages; local build artifacts masked the hole (the green-local/red-fresh-CI class).
-- Fix: scripts/sql-on-fhir/tsconfig.json gained references to core + sql-on-fhir (TS project-service source redirect); reproduced first by wiping dist/ locally.
-- Planned guard: a wiped-dist eslint leg in the local verify battery (or a dedicated loop gate step); CI's no-build static/lint job remains the structural catch today
+- Fix: DONE: root-cause fix — a namespaced @bonfire/source export condition placed FIRST in each internal package's exports map + customConditions in tsconfig.base.json, so tsc AND typescript-eslint's projectService always resolve @bonfire/* to src/index.ts, dist present or not. Proven by moving dist aside and getting 0 eslint errors on the consumer graph. Project references stay (for tsc -b ordering). A resolution guard pins the mechanism, and its built-in inversion proves the condition is load-bearing (without it resolution falls back to dist).
+- Guard: `test` → `loop/src/gates/dist-independent-resolution.test.ts::BP-031: @bonfire/* type resolution is dist-independent`
 - Recorded: 2026-07-04
 
-## BP-032 — comment-terminating-glob — OPEN
+## BP-032 — comment-terminating-glob — GUARDED
 
 - Symptom: Writing vd_*/spidx inside a /** block comment terminates the comment at the embedded */ and shreds the file into TS1434 parse errors — hit twice by the BF-04 maker and once by the operator in the close-out.
 - Root cause: The vd_* naming convention followed by a prose slash collides with the block-comment terminator; nothing lints comment bodies.
-- Fix: Rewrote the affected comments as vd_* + spidx; convention noted, no structural guard yet.
-- Planned guard: an sgrule/lint check flagging */ immediately followed by an identifier character inside block comments, or an ast-grep pattern on the parse error class
+- Fix: DONE: a self-testing lexer-level checker (scripts/check-comment-hazards.ts, package script check:comments, wired into BOTH the CI structural gate and the loop structural gate). It scans every tracked TS file with the TypeScript scanner and flags a MultiLineCommentTrivia that closed on a comment terminator immediately followed by an identifier char — the signature of an early-terminated comment. Globs inside string/template literals are invisible by construction (0 false positives over 225 files). The exported detector is pinned by a test; the script self-tests (exit 2) on every run.
+- Guard: `test` → `loop/src/gates/comment-hazards.test.ts::BP-032: block-comment terminator hazard detector`
 - Recorded: 2026-07-04
 
 ## BP-033 — order-by-text-alias-shadow — GUARDED

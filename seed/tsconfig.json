@@ -7,5 +7,5 @@
   },
   "references": [{ "path": "../packages/core" }],
   "include": ["*.ts"],
-  "exclude": ["dist", "node_modules"]
+  "exclude": ["dist", "node_modules", "*.test.ts"]
 }
