@@ -5,7 +5,7 @@
 > `loop ratchet` (and the test suite): if the guard artifact disappears,
 > the check fails and the bug is considered reopened.
 
-35 guarded · 1 open (debt owed a guard)
+36 guarded · 1 open (debt owed a guard)
 
 ## BP-001 — gate-crash-read-as-pass — GUARDED
 
@@ -283,7 +283,7 @@
 
 - Symptom: The cited-search path could ship PHI (the raw query text) off-box: a maker wiring an external embedding/rerank call or a hosted-model API SDK into the default search path would exfiltrate the query to a third party.
 - Root cause: Retrieval that embeds/ranks with a HOSTED model sends the query text off the tenant boundary; nothing structurally forbade a network client or a hosted-model SDK under the search module.
-- Fix: BF-06: the default path is self-hosted + in-process (node:crypto feature-hash dev embedder; the reranker is an undefined-by-default seam, no cross-encoder ships) so it makes ZERO off-box calls. The ast-grep rule no-egress-in-search-path bans network primitives (fetch/globalThis.fetch/WebSocket/EventSource + node:http|https|net|tls|dns|dgram|http2|child_process) and hosted-model API SDKs (openai/cohere-ai/@anthropic-ai/sdk/@google/generative-ai/@huggingface/inference/replicate) via static import, require, OR dynamic import() under packages/core/src/search/** (local in-process inference — onnxruntime-node, @xenova/transformers — stays allowed). The bf06-no-phi-egress Stage-2 eval is the live proof: a globalThis.fetch spy shows a real, results-returning default search makes zero off-box calls. Residual (follow-up): a repo-global network default-deny beyond the search module.
+- Fix: BF-06: the default path is self-hosted + in-process (node:crypto feature-hash dev embedder; the reranker is an undefined-by-default seam, no cross-encoder ships) so it makes ZERO off-box calls. The ast-grep rule no-egress-in-search-path bans network primitives (fetch/globalThis.fetch/WebSocket/EventSource + node:http|https|net|tls|dns|dgram|http2|child_process) and hosted-model API SDKs (openai/cohere-ai/@anthropic-ai/sdk/@google/generative-ai/@huggingface/inference/replicate) via static import, require, OR dynamic import() under packages/core/src/{search,ccp}/** (local in-process inference — onnxruntime-node, @xenova/transformers — stays allowed). The bf06-no-phi-egress Stage-2 eval is the live proof: a globalThis.fetch spy shows a real, results-returning default search makes zero off-box calls. Widened in BF-07 to packages/core/src/ccp/** (the CCP serializer + offline o200k tokenizer inherit the floor; the bf07-token-residual eval's fetch spy confirms the token measurement makes zero off-box calls). Residual (follow-up): a repo-global network default-deny beyond {search,ccp}.
 - Guard: `ast-grep` → `sgrules/no-egress-in-search-path.yml`
 - Recorded: 2026-07-07
 
@@ -294,3 +294,11 @@
 - Fix: A turbo package override serializes the sensitive suite: @bonfire/sql-on-fhir#test dependsOn @bonfire/core#test + @bonfire/api#test, so it runs last + alone — nothing writes fhir_resources / reads vd_* concurrently with its rebuild+drop. Proven 3/3 fresh + CI green. A loop gate test pins the override so removing it reopens the race.
 - Guard: `test` → `loop/src/gates/serialized-db-lane.test.ts::BP-036: the sql-on-fhir DB suite runs in a serialized lane`
 - Recorded: 2026-07-07
+
+## BP-037 — ccp-serializer-injection — GUARDED
+
+- Symptom: The CCP text serializer interpolated three untrusted response-derived strings (header sourceAuditEventId, excludedByPolicy resourceType + reason) RAW into its line-structured document; a hostile clinical/deny string carrying a newline could fabricate a forged `[9] Type/<id>` group header or a `  path: value` span line that a downstream agent reads as an authentic citation — and the content digest would then notarize the forgery. Span VALUES were JSON-encoded but these three header/summary fields were not.
+- Root cause: A line-structured artifact fed to an LLM interpolated attacker-influenced, only length/enum-bounded (never charset-bounded) strings from the untrusted BF-06 SearchResponse boundary directly into template lines; a newline breaks out of the intended line.
+- Fix: BF-07: JSON.stringify all three interpolations (matching the span-value Class-5 pattern) so each stays a single escaped token and the document is losslessly invertible. The ast-grep rule no-raw-response-string-in-ccp-serialize bans a bare ${x} interpolation inside serialize.ts (the JSON.stringify(x) form is clean, via inside: template_substitution stopBy: neighbor). The bf07-text-invertible Stage-2 eval is the live proof: a forged excludedByPolicy reason + 64-char auditEventId with embedded newlines produce ZERO forged group/span lines and doc.text inverts losslessly to the exact span set.
+- Guard: `ast-grep` → `sgrules/no-raw-response-string-in-ccp-serialize.yml`
+- Recorded: 2026-07-10

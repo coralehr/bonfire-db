@@ -1,0 +1,39 @@
+# No raw untrusted response-derived string interpolated into the CCP text (ratchet BP-037).
+# BF-07 panel finding A: the CCP serializer builds a compact, line-structured document
+# (`[`-prefixed group headers, 2-space-indented `path: <json>` span lines) that a downstream
+# agent reads as authoritative. Three fields on the serializer's input arrive from the UNTRUSTED
+# BF-06 SearchResponse boundary and are only length-/enum-bounded, never charset-bounded:
+#   - header.sourceAuditEventId  (auditEventId: any 64-char string, newlines allowed)
+#   - entry.resourceType         (excludedByPolicy withheld type: z.string().min(1))
+#   - entry.reason               (excludedByPolicy deny reason:  z.string().min(1))
+# Interpolated RAW into a template line, any of them could carry a newline that fabricates a
+# forged `[9] Type/<id>` group header or a `  path: value` span line — and the content digest
+# would then notarize the forgery. The ONLY safe form is `${JSON.stringify(...)}`, which keeps
+# each on a single escaped token so the document stays losslessly invertible. This rule, scoped
+# to serialize.ts, BANS the bare interpolations; the JSON.stringify form is clean. The structural
+# control behind bf07-text-invertible.
+id: no-raw-response-string-in-ccp-serialize
+language: TypeScript
+severity: error
+message: Raw response-derived string interpolated into the CCP text — wrap it in JSON.stringify(...) so a hostile newline cannot forge a group/span line (serializer injection).
+note: |
+  In packages/core/src/ccp/serialize.ts every interpolation of an untrusted
+  SearchResponse field — header.sourceAuditEventId, entry.resourceType,
+  entry.reason — MUST be `${JSON.stringify(x)}`, never bare `${x}`. These
+  fields are only length/enum bounded, so a bare newline would fabricate a
+  forged `[n] Type/<id>` header or a `  path: value` span line that the agent
+  (and the content digest) would treat as genuine. See bf07-text-invertible.
+metadata:
+  slop-pattern: raw-response-string-in-ccp-serialize
+  gate-stage: 1
+  ratchet: BP-037
+files:
+  - "packages/core/src/ccp/serialize.ts"
+rule:
+  any:
+    - pattern: entry.reason
+    - pattern: entry.resourceType
+    - pattern: header.sourceAuditEventId
+  inside:
+    kind: template_substitution
+    stopBy: neighbor
