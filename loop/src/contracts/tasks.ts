@@ -562,7 +562,11 @@ export const tasks: readonly SliceContract[] = [
       "apps/api/src/routes/governance/**",
       "apps/api/test/**",
       "drizzle/**",
-      "loop/evals/governance/**"
+      // Operator-prep dead-path reconcile (BF-08 precedent): the eval corpus
+      // loader reads loop/evals/*.jsonl flat (loop/src/evals/corpus.ts), so the
+      // originally-contracted loop/evals/governance/** subdir could never load.
+      // bf09 eval rows live flat like every other slice's.
+      "loop/evals/bf09.jsonl"
     ],
     forbiddenPaths: [
       "packages/core/src/audit/**",
