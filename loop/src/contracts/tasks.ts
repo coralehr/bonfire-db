@@ -423,12 +423,23 @@ export const tasks: readonly SliceContract[] = [
     goal: "Build the Cited Context Projection \u2014 the agent's default read surface \u2014 that serializes a policy-scoped cited-search result set into a compact, span-cited document where every span carries (resource id, JSONB path, audit hash), ordered U-shape, with offline token-measurement hooks. Raw FHIR stays an explicit, rarely-needed escape hatch.",
     why: "The whole thesis \u2014 cheaper and more accurate are the same move \u2014 lives here: the agent never reads raw FHIR, it reads the CCP built from canonical FHIR underneath. Compact serialization plus span citations make agent reads token-lean and verifiable, and the audit hash extends tamper-evidence all the way to the citation.",
     dependsOn: ["BF-05", "BF-06"],
-    allowedPaths: [
-      "packages/core/src/ccp/**",
-      "packages/core/src/index.ts",
-      "loop/evals/corpus/bf-07/**",
-      "docs/adr/**"
-    ],
+    // Operator prep (BF-07, disclosed) — the gate-base commit this slice builds ON
+    // carries the changes that live OFF the maker floor, so the maker diff (HEAD vs
+    // gate base) stays inside allowedPaths and the strict allowed-paths gate holds:
+    //   * packages/core/package.json (+ bun.lock) — the offline `gpt-tokenizer`
+    //     dep the token-measurement hook uses (acceptance #6: fully offline, zero
+    //     keys). Dep authorship is off the maker floor.
+    //   * sgrules/no-egress-in-search-path.yml — its `files` scope is widened to
+    //     packages/core/src/ccp/** (BP-035 sibling-helper follow-up), so the CCP
+    //     serializer/tokenizer inherits the no-PHI-egress structural floor
+    //     (acceptance #6 offline). Guard authorship is operator territory.
+    // Contract-drift reconcile: the `loop/evals/corpus/bf-07/**` allowedPath was
+    // DEAD (GLOBAL_FORBIDDEN `loop/**` shadows it — forbidden wins) and is removed
+    // here; the 6 bf-07-* Stage-2 evals are the operator POST-MERGE wave (loop/**
+    // is off the maker floor), matching every prior slice. Golden fixtures are
+    // self-seeded hermetically in-test (BP-024), so no committed fixture dir is
+    // needed and none is carved.
+    allowedPaths: ["packages/core/src/ccp/**", "packages/core/src/index.ts", "docs/adr/**"],
     forbiddenPaths: [
       "seed/**",
       "drizzle/**",

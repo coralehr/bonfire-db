@@ -1,34 +1,42 @@
-# No PHI egress from the cited-search path (ratchet BP-035).
+# No PHI egress from the cited-search / CCP read path (ratchet BP-035).
 # BF-06's security floor: in the default config, search performs ZERO external
 # embedding/rerank calls — the dev embedder is node:crypto feature-hashing and a
-# real embedder is a SELF-HOSTED, in-process/on-box model. Any egress vector under
-# packages/core/src/search/** would ship PHI (the query text) off-box: a network
+# real embedder is a SELF-HOSTED, in-process/on-box model. BF-07 extends the same
+# floor to the Cited Context Projection: it serializes and TOKEN-MEASURES the
+# scoped result set fully offline (the tokenizer is a bundled-ranks library, zero
+# keys — acceptance #6), so ccp/** must make no off-box call either. Widening the
+# scope here executes the documented BP-035 sibling-helper-scope follow-up. Any
+# egress vector under packages/core/src/{search,ccp}/** would ship PHI (the query
+# text, or projected clinical span values) off-box: a network
 # client, a hosted-model API SDK, a raw node network core module (net/tls/dns/
 # dgram/http2/child_process — these ALSO evade a globalThis.fetch runtime spy), or
 # a fetch/WebSocket/EventSource call — via static import, require, OR dynamic
-# import(). Banned outright — the structural control behind bf06-no-phi-egress.
+# import(). Banned outright — the structural control behind bf06-no-phi-egress
+# and bf-07-token-residual (offline tokenizer).
 # NOTE: local in-process inference libs (onnxruntime-node, @xenova/transformers)
 # are NOT banned — they are the ALLOWED self-hosted path. Tests are exempt (they
-# spy to PROVE the invariant). A repo-wide default-deny + a sibling-helper scope
-# (packages/core/src/**) is a documented BP-035 follow-up.
+# spy to PROVE the invariant). A repo-wide default-deny beyond {search,ccp} is a
+# documented BP-035 follow-up.
 id: no-egress-in-search-path
 language: TypeScript
 severity: error
-message: Network/hosted-model egress in the cited-search path — search must make no off-box call in the default config (PHI egress).
+message: Network/hosted-model egress in the cited-search / CCP path — these must make no off-box call in the default config (PHI egress).
 note: |
   Cited search embeds/ranks with a self-hosted, in-process model (the v0 dev
-  embedder is node:crypto only). Under packages/core/src/search do not import
+  embedder is node:crypto only); the CCP serializer/tokenizer is fully offline.
+  Under packages/core/src/{search,ccp} do not import
   (static/require/dynamic) node:http|https|net|tls|dns|dgram|http2|child_process,
   undici/axios/got/node-fetch, or a hosted embedding/LLM SDK (openai, cohere-ai,
   @anthropic-ai/sdk, @google/generative-ai, @huggingface/inference, replicate),
   and do not call fetch()/globalThis.fetch()/new WebSocket()/new EventSource().
-  Run the model on-box (onnxruntime-node / @xenova/transformers) instead.
+  Run any model on-box (onnxruntime-node / @xenova/transformers) instead.
 metadata:
   slop-pattern: phi-egress-search-path
   gate-stage: 1
   ratchet: BP-035
 files:
   - "packages/core/src/search/**"
+  - "packages/core/src/ccp/**"
 ignores:
   - "**/*.test.ts"
 rule:

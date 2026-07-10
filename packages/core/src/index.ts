@@ -39,6 +39,20 @@ export type { VerifiedIdentity, VerifyTokenConfig } from "./auth/types.js";
 export { DEFAULT_FHIR_USER_CLAIM, verifiedClaimsSchema } from "./auth/types.js";
 export type { Verifier } from "./auth/verify-token.js";
 export { createVerifier, verifyToken } from "./auth/verify-token.js";
+export { buildCcp } from "./ccp/build-ccp.js";
+export { ccpContentDigest } from "./ccp/content-digest.js";
+export type { CcpError, CcpErrorCode } from "./ccp/errors.js";
+export { LEAF_PATHS, resolvePath } from "./ccp/leaf-paths.js";
+export type {
+  CcpDocument,
+  CcpInput,
+  CcpSpan,
+  CcpSpanDraft,
+  CcpSpanValue
+} from "./ccp/schemas.js";
+export { CCP_VERSION, ccpDocumentSchema, ccpInputSchema } from "./ccp/schemas.js";
+export type { CcpTokenMeasurement, TokenCounter } from "./ccp/token-count.js";
+export { measureCcp, o200kCounter } from "./ccp/token-count.js";
 export type { JsonObject, JsonValue } from "./db/canonical-json.js";
 export { canonicalizeJson, contentHash, sha256Hex } from "./db/canonical-json.js";
 export type { DatabaseTarget, EnvMap } from "./db/env.js";
