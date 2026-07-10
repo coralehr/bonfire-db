@@ -1,0 +1,41 @@
+{
+  "name": "@bonfire/mcp",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "@bonfire/source": "./src/index.ts",
+      "bun": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "bin": {
+    "bonfire-mcp": "dist/main.js"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b --noEmit",
+    "lint": "eslint .",
+    "test": "bun test --pass-with-no-tests",
+    "api:update": "api-extractor run --local",
+    "gate": "api-extractor run"
+  },
+  "dependencies": {
+    "@bonfire/core": "workspace:*",
+    "@bonfire/sdk": "workspace:*",
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@microsoft/api-extractor": "7.58.9",
+    "postgres": "3.4.9"
+  }
+}

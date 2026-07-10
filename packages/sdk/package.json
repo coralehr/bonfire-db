@@ -1,0 +1,37 @@
+{
+  "name": "@bonfire/sdk",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "@bonfire/source": "./src/index.ts",
+      "bun": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b --noEmit",
+    "lint": "eslint .",
+    "test": "bun test --pass-with-no-tests",
+    "gen": "bun run src/gen/main.ts",
+    "api:update": "api-extractor run --local",
+    "gate": "api-extractor run"
+  },
+  "dependencies": {
+    "@bonfire/core": "workspace:*",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@microsoft/api-extractor": "7.58.9",
+    "postgres": "3.4.9"
+  }
+}

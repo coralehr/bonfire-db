@@ -1,0 +1,66 @@
+# No shell / filesystem / network egress in the MCP server (BF-08, ratchet
+# candidate BP-038). The local MCP server is the FIRST place an untrusted
+# agent enters the system; its contract is a narrow propose-only typed tool
+# allowlist with NO raw SQL, FHIRPath, shell, or filesystem access. Any
+# child_process/shell import is an agent-reachable shell; any fs import is
+# agent-reachable filesystem; any network client or hosted-model SDK is a PHI
+# egress vector for clinical values flowing through tool responses. All of
+# these are banned outright under packages/mcp/src — the MCP composes
+# @bonfire/sdk's session-bound client and the @modelcontextprotocol/sdk stdio
+# transport, and needs none of them. Tests are exempt (they spy to PROVE the
+# invariant).
+id: no-egress-in-mcp
+language: TypeScript
+severity: error
+message: Shell/filesystem/network import in the MCP server — the propose-only tool surface must expose no shell, no fs, and make no off-box call.
+note: |
+  packages/mcp/src is the agent-facing boundary: tools are typed wrappers over
+  @bonfire/sdk's session-bound client only. Do not import (static/require/
+  dynamic) node:child_process|fs|http|https|net|tls|dns|dgram|http2,
+  undici/axios/got/node-fetch, or a hosted-model SDK, and do not call
+  fetch()/globalThis.fetch()/new WebSocket()/new EventSource()/Bun.spawn.
+metadata:
+  slop-pattern: mcp-egress
+  gate-stage: 1
+files:
+  - "packages/mcp/src/**"
+ignores:
+  - "**/*.test.ts"
+  - "**/*.test.tsx"
+rule:
+  any:
+    - pattern: import $$$IMPORT from "node:child_process"
+    - pattern: import $$$IMPORT from "child_process"
+    - pattern: import $$$IMPORT from "node:fs"
+    - pattern: import $$$IMPORT from "node:fs/promises"
+    - pattern: import $$$IMPORT from "fs"
+    - pattern: import $$$IMPORT from "node:http"
+    - pattern: import $$$IMPORT from "node:https"
+    - pattern: import $$$IMPORT from "node:net"
+    - pattern: import $$$IMPORT from "node:tls"
+    - pattern: import $$$IMPORT from "node:dns"
+    - pattern: import $$$IMPORT from "node:dgram"
+    - pattern: import $$$IMPORT from "node:http2"
+    - pattern: import $$$IMPORT from "undici"
+    - pattern: import $$$IMPORT from "axios"
+    - pattern: import $$$IMPORT from "got"
+    - pattern: import $$$IMPORT from "node-fetch"
+    - pattern: import $$$IMPORT from "openai"
+    - pattern: import $$$IMPORT from "@anthropic-ai/sdk"
+    - pattern: require("node:child_process")
+    - pattern: require("child_process")
+    - pattern: require("node:fs")
+    - pattern: require("fs")
+    - pattern: import("node:child_process")
+    - pattern: import("node:fs")
+    - pattern: fetch($$$ARGS)
+    - pattern: globalThis.fetch($$$ARGS)
+    - pattern: new WebSocket($$$ARGS)
+    - pattern: new EventSource($$$ARGS)
+    - pattern: Bun.spawn($$$ARGS)
+    - pattern: Bun.spawnSync($$$ARGS)
+    - pattern: Bun.$`$$$CMD`
+    - pattern: Bun.file($$$ARGS)
+    - pattern: Bun.write($$$ARGS)
+    - pattern: Bun.connect($$$ARGS)
+    - pattern: Bun.listen($$$ARGS)

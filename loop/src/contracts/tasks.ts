@@ -490,13 +490,15 @@ export const tasks: readonly SliceContract[] = [
     goal: "Ship the auto-generated typed TS SDK (from a type-schema IR) that mirrors Bonfire's public surface and returns the Result discriminated union at every boundary, a reactive useClinicalQuery hook over Postgres LISTEN/NOTIFY, and a local MCP server exposing a narrow propose-only typed tool allowlist with no raw SQL/FHIRPath/shell/filesystem access and no approve/commit tool.",
     why: "This is the AI-native client layer: agents and apps consume Bonfire through one typed, default-deny surface instead of touching raw FHIR or SQL. The SDK and MCP are exactly where an agent could break tenant isolation, fail open on authorization, or gain approve/commit power, so this slice makes propose-only governance and cross-tenant safety structural at the client boundary rather than a runtime hope.",
     dependsOn: ["BF-03", "BF-04", "BF-05", "BF-06", "BF-07"],
-    allowedPaths: [
-      "packages/sdk/**",
-      "packages/mcp/**",
-      "drizzle/migrations/**",
-      "loop/evals/bf-08/**",
-      "tsconfig.json"
-    ],
+    // Contract-drift reconcile (BF-08 operator prep, disclosed): the original
+    // `drizzle/migrations/**` allowedPath was DEAD — migrations live in
+    // `drizzle/*.sql` (+ meta/_journal.json), which stays off the maker floor;
+    // the 0011 NOTIFY event-trigger migration lands in operator prep. The
+    // `loop/evals/bf-08/**` allowedPath was DEAD too — GLOBAL_FORBIDDEN
+    // `loop/**` shadows it; the bf08-* Stage-2 execution evals are the
+    // post-merge operator close-out wave (BF-06/BF-07 precedent), which also
+    // owns the `bun test loop/evals/bf-08` step listed in verify[].
+    allowedPaths: ["packages/sdk/**", "packages/mcp/**", "tsconfig.json"],
     forbiddenPaths: [
       "seed/**",
       "packages/core/**",
@@ -514,7 +516,7 @@ export const tasks: readonly SliceContract[] = [
       "Calling an MCP tool name not on the allowlist, or passing an argument outside its typed schema, returns a structured default-deny and executes nothing; a negative test asserts zero rows and zero side effects.",
       "Every MCP tool response returning clinical data carries the ABAC policy receipt and audit id propagated from the underlying read; an MCP call made in practice B's context requesting practice A data returns deny/empty with a receipt and zero rows (no cross-tenant leak via the agent path).",
       "Tool arguments are prompt-injection sanitized: an execution-watching eval feeds an injected instruction inside a tool argument and asserts scope is unchanged and no unlisted action is triggered.",
-      "`bun run gate` passes including dependency-cruiser boundaries (`apps \u2192 sdk \u2192 core`, `mcp \u2192 core`; sdk and mcp do not import each other's internals or core internals beyond published `exports`), knip (no dead code), jscpd, and the allowed-paths diff check; the BF-02/BF-04/BF-05 RLS and audit-chain regression proofs still pass with the added NOTIFY trigger."
+      "`bun run gate` passes including dependency-cruiser boundaries (`apps \u2192 sdk \u2192 core`; `mcp \u2192 sdk` via published exports only, `mcp \u2192 core` via published exports \u2014 reconciled in operator prep after two independent design reviews converged: mcp re-implementing the session boundary would be a second authz boundary that drifts; sdk never imports mcp; no package imports another's internals beyond published `exports`), knip (no dead code), jscpd, and the allowed-paths diff check; the BF-02/BF-04/BF-05 RLS and audit-chain regression proofs still pass with the added NOTIFY trigger."
     ],
     verify: [
       "bun install",

@@ -11,6 +11,8 @@ WORKDIR /app
 COPY package.json bun.lock tsconfig.json tsconfig.base.json ./
 COPY packages/core/package.json packages/core/package.json
 COPY packages/sql-on-fhir/package.json packages/sql-on-fhir/package.json
+COPY packages/sdk/package.json packages/sdk/package.json
+COPY packages/mcp/package.json packages/mcp/package.json
 COPY apps/api/package.json apps/api/package.json
 COPY loop/package.json loop/package.json
 COPY seed/package.json seed/package.json
@@ -26,6 +28,8 @@ COPY --from=deps /app/node_modules node_modules
 COPY --from=deps /app/package.json /app/bun.lock /app/tsconfig.json /app/tsconfig.base.json ./
 COPY --from=deps /app/packages/core/package.json packages/core/package.json
 COPY --from=deps /app/packages/sql-on-fhir/package.json packages/sql-on-fhir/package.json
+COPY --from=deps /app/packages/sdk/package.json packages/sdk/package.json
+COPY --from=deps /app/packages/mcp/package.json packages/mcp/package.json
 COPY --from=deps /app/apps/api/package.json apps/api/package.json
 COPY --from=deps /app/loop/package.json loop/package.json
 COPY --from=deps /app/seed/package.json seed/package.json

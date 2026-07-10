@@ -10,11 +10,14 @@
  * Two codebases share one repo, and the firewall between them is absolute:
  *
  *   THE PRODUCT (shipped):                                THE HARNESS (builds the product):
- *     apps/*  ─▶ packages/sdk ─▶ packages/core ◀─ packages/mcp      loop/*  ─▶ loop/* only
- *                                  ▲
- *                            (the foundation)
+ *     apps/*  ─▶ packages/sdk ─▶ packages/core             loop/*  ─▶ loop/* only
+ *     packages/mcp ─▶ packages/sdk (+ core)  ▲
+ *                                      (the foundation)
  *
- *   • Dependencies flow ONE WAY, toward `core`. No back-edges, no cycles.
+ *   • Dependencies flow ONE WAY, toward `core`. No back-edges, no cycles. mcp consumes the
+ *     product through @bonfire/sdk's published surface (the session-bound client IS the
+ *     identity/tenant boundary — one boundary, not a second copy in mcp) plus core's
+ *     published exports; sdk → mcp stays forbidden. (BF-08 design review, 2026-07-10.)
  *   • `loop/**` (the harness) may import `loop/**` ONLY. It exercises the product as an
  *     external subprocess; it never links against product code.
  *   • The product (and its workspace glue) must NEVER import `loop/**`. Shipping code is fully
@@ -84,13 +87,16 @@ module.exports = {
       to: { path: "^(packages/mcp|apps)/" }
     },
     {
-      name: "mcp-depends-only-on-core",
+      name: "mcp-depends-on-sdk-and-core",
       severity: "error",
       comment:
-        "packages/mcp may depend on packages/core only. It must not reach into sdk or apps " +
-        "(one-way: mcp -> core).",
+        "packages/mcp consumes the product through @bonfire/sdk's published surface (the " +
+        "session-bound client is the identity/tenant boundary — one boundary, never a second " +
+        "copy in mcp) plus @bonfire/core's published exports. It must not reach into apps. " +
+        "sdk -> mcp stays forbidden (sdk-depends-only-on-core), and deep src/ imports are " +
+        "blocked by packages-consumed-via-public-entry.",
       from: { path: "^packages/mcp/" },
-      to: { path: "^(packages/sdk|apps)/" }
+      to: { path: "^apps/" }
     },
     {
       name: "apps-do-not-cross-import",

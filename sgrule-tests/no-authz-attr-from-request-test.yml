@@ -15,6 +15,14 @@ invalid:
   - |
     const p = req.body.practiceId;
   - |
+    const a = args.practiceId;
+  - |
+    const b = input.role;
+  - |
+    const c = toolArgs.practice_id;
+  - |
+    const d = toolArguments.role;
+  - |
     const p2 = payload.practice_id;
   - |
     const r = claims.role;

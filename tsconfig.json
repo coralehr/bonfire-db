@@ -3,6 +3,8 @@
   "references": [
     { "path": "./loop" },
     { "path": "./packages/core" },
+    { "path": "./packages/mcp" },
+    { "path": "./packages/sdk" },
     { "path": "./packages/sql-on-fhir" },
     { "path": "./apps/api" }
   ]
