@@ -26,15 +26,16 @@ const CORPUS_SIZE = 6;
 const MIN_RANKED = 4;
 const practice = crypto.randomUUID();
 
-/** Mirror of ccp/ushape.ts orderUShape: even indices to the front, odd to the back. */
+/**
+ * The expected U-shape of a rank order, computed INDEPENDENTLY of ccp/ushape.ts
+ * (the harness cannot import product code): even-rank items in order, then the
+ * odd-rank items reversed — equivalent to the product's front-push/back-unshift,
+ * proven by asserting the doc's real group order against this.
+ */
 function expectedUShape<T>(ranked: readonly T[]): T[] {
-  const front: T[] = [];
-  const back: T[] = [];
-  ranked.forEach((item, index) => {
-    if (index % 2 === 0) front.push(item);
-    else back.unshift(item);
-  });
-  return [...front, ...back];
+  const evens = ranked.filter((_item, index) => index % 2 === 0);
+  const odds = ranked.filter((_item, index) => index % 2 === 1).reverse();
+  return [...evens, ...odds];
 }
 
 /** Unique resourceIds in the order their spans are emitted (= group order). */
