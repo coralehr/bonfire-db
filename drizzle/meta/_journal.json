@@ -78,6 +78,13 @@
       "when": 1752451200000,
       "tag": "0010_bp019_tenant_scoped_keys",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1752537600000,
+      "tag": "0011_projection_notify",
+      "breakpoints": true
     }
   ]
 }

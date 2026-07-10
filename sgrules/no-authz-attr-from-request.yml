@@ -1,6 +1,7 @@
 # Authorization attributes (practice_id / role) must come ONLY from the
 # server-side membership row (resolveMembership), NEVER from a request body /
-# header / query or a decoded token / claims object (BF-13, acceptance #5,
+# header / query, a decoded token / claims object, or an MCP tool-argument
+# object (args/input/toolArgs — BF-08 widening; BF-13, acceptance #5,
 # claims-not-trusted). Reading practiceId/practice_id/role off an untrusted
 # source lets the client name its own tenant/role — a total ABAC bypass /
 # privilege escalation. The sanctioned sources (membership, the resolved
@@ -27,7 +28,7 @@ rule:
         field: object
         stopBy: end
         kind: identifier
-        regex: "^(req|request|body|headers|header|query|params|payload|claims|token|decoded|jwt)$"
+        regex: "^(req|request|body|headers|header|query|params|payload|claims|token|decoded|jwt|args|input|toolArgs|toolArguments)$"
 ---
 id: no-authz-attr-from-request-tsx
 language: Tsx
@@ -51,4 +52,4 @@ rule:
         field: object
         stopBy: end
         kind: identifier
-        regex: "^(req|request|body|headers|header|query|params|payload|claims|token|decoded|jwt)$"
+        regex: "^(req|request|body|headers|header|query|params|payload|claims|token|decoded|jwt|args|input|toolArgs|toolArguments)$"

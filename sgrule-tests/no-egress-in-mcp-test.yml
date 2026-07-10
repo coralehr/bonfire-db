@@ -1,0 +1,43 @@
+# Behaviour tests for no-egress-in-mcp (BF-08, ratchet candidate BP-038). Run:
+# bunx ast-grep test --skip-snapshot-tests
+# Path scoping (files/ignores) does not apply to inline cases — these prove the
+# PATTERNS; the mcp-only + test-exempt scoping lives in the rule. The MCP
+# composes @bonfire/sdk + @modelcontextprotocol/sdk + zod ONLY — those stay
+# VALID. Every shell, filesystem, and network vector is INVALID.
+id: no-egress-in-mcp
+valid:
+  - |
+    import { z } from "zod";
+  - |
+    import { authenticate, createBonfireClient } from "@bonfire/sdk";
+  - |
+    import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+  - |
+    import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+  - |
+    import type { Result } from "@bonfire/core";
+invalid:
+  - |
+    import { execSync } from "node:child_process";
+  - |
+    import { spawn } from "child_process";
+  - |
+    import { readFileSync } from "node:fs";
+  - |
+    import { readFile } from "node:fs/promises";
+  - |
+    import fs from "fs";
+  - |
+    import http from "node:http";
+  - |
+    import { request } from "undici";
+  - |
+    const cp = require("node:child_process");
+  - |
+    const mod = await import("node:fs");
+  - |
+    const res = await fetch("https://api.example.com");
+  - |
+    const ws = new WebSocket("wss://example.com");
+  - |
+    const proc = Bun.spawn(["ls"]);

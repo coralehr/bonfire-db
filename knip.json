@@ -17,6 +17,22 @@
       "entry": ["src/index.ts", "src/cli/**/*.ts", "src/**/*.test.ts"],
       "project": ["src/**/*.ts"]
     },
+    "packages/sdk": {
+      "entry": ["src/index.ts", "src/gen/*.ts", "src/**/*.test.ts"],
+      "project": ["src/**/*.ts"],
+      "ignoreDependencies": ["zod", "@microsoft/api-extractor", "postgres"]
+    },
+    "packages/mcp": {
+      "entry": ["src/index.ts", "src/main.ts", "src/**/*.test.ts"],
+      "project": ["src/**/*.ts"],
+      "ignoreDependencies": [
+        "@bonfire/sdk",
+        "@modelcontextprotocol/sdk",
+        "zod",
+        "@microsoft/api-extractor",
+        "postgres"
+      ]
+    },
     "apps/api": {
       "entry": ["src/server.ts", "src/**/*.test.ts"],
       "project": ["src/**/*.ts"]
