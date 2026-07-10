@@ -8,7 +8,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
 import type { TenantDb, Verifier } from "@bonfire/core";
-import { connectTenantDb, err } from "@bonfire/core";
+import { connectTenantDb, err, SYSTEM_PRACTICE_ID } from "@bonfire/core";
 import { okVerifier, ownerClient, sessionFor, syntheticToken, TEST_ISS } from "../support.test.js";
 import { authenticate } from "./session.js";
 
@@ -61,11 +61,28 @@ describe("authenticate (U2: the only session constructor)", () => {
     if (!result.ok) expect(result.error.code).toBe("AUTH_VERIFY_FAILED");
   });
 
-  test("authenticated but NO membership row -> err AUTH_NO_MEMBERSHIP (deny, not ok-null)", async () => {
-    const verifier = okVerifier({ iss: TEST_ISS, sub: `ghost-${randomUUID()}` });
+  test("authenticated but NO membership row -> err AUTH_NO_MEMBERSHIP + SYSTEM deny row", async () => {
+    // Unique sub -> unique actor_id (iss#sub), so the SYSTEM chain (shared across
+    // suites) can be keyed off actor_id, never a racy global count(*).
+    const sub = `ghost-${randomUUID()}`;
+    const actorId = `${TEST_ISS}#${sub}`;
+    const verifier = okVerifier({ iss: TEST_ISS, sub });
     const result = await authenticate({ db, verifier, token: syntheticToken() });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.code).toBe("AUTH_NO_MEMBERSHIP");
+    // Forensic backstop (BF-13 acceptance #7): the deny appended exactly one
+    // deny row for this actor on the SYSTEM chain. Reddens if denyAudited stops
+    // calling auditAuthFailure — the deny code alone would still pass above.
+    const audited = await db.withTenant(
+      SYSTEM_PRACTICE_ID,
+      (sql) =>
+        sql<{ decision: string }[]>`select decision from audit_log where actor_id = ${actorId}`
+    );
+    expect(audited.ok).toBe(true);
+    if (audited.ok) {
+      expect(audited.data.length).toBe(1);
+      expect(audited.data[0]?.decision).toBe("deny");
+    }
   });
 
   test("membership lookup fault -> err AUTH_MEMBERSHIP_LOOKUP_FAILED, no throw", async () => {
