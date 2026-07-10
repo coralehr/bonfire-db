@@ -104,8 +104,14 @@ const searchArgsSchema = z.strictObject({
  * Fixed-format search rendering: EVERY field derived from stored data is
  * JSON.stringify-wrapped so an injected newline/heading stays one escaped
  * token (D3); counts are numbers rendered via String().
+ *
+ * Exported for the injection canary ONLY (not re-exported from index.ts, so
+ * the package's public surface is unchanged). No field this renderer emits can
+ * carry a newline with today's fixtures — ids are uuids, paths come from the
+ * indexer's fixed leaf-path table — so an end-to-end tool call cannot prove the
+ * JSON-encoding is load-bearing. The canary drives it with hostile input.
  */
-function renderSearchText(response: SearchResponse): string {
+export function renderSearchText(response: SearchResponse): string {
   const lines = [
     `search: ${String(response.results.length)} hit(s), excludedByPolicy=${String(response.excludedByPolicy.count)}`
   ];
@@ -179,7 +185,8 @@ const getContextTool = defineTool({
   }
 });
 
-function renderWriteText(record: FhirResourceRecord): string {
+/** Exported for the injection canary only; see renderSearchText. */
+export function renderWriteText(record: FhirResourceRecord): string {
   return [
     `wrote ${JSON.stringify(record.type)} id=${JSON.stringify(record.id)} versionId=${JSON.stringify(record.versionId)}`,
     "this resource is live in the practice's canonical FHIR store now"

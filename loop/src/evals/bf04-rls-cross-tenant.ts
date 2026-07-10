@@ -38,16 +38,29 @@ function count(rows: readonly unknown[]): number {
   return n;
 }
 
+// Pick practice A from the practices that provably carry rows on BOTH read
+// surfaces this eval probes. Selecting the lowest practice_id outright (the
+// old heuristic) is fragile on any stack a test suite has touched: BF-08's
+// hermetic sdk/mcp suites seed practices with randomUUID(), so ~6 times in 16 a
+// projection-only practice sorts below the seeded one, practice A owns zero
+// spidx rows, and the eval fails as "vacuous" — a coin-flip CI flake that says
+// nothing about RLS. The join makes the non-vacuity a property of the SELECT,
+// not of luck; `order by` keeps the choice deterministic.
 const practices = await owner`
-  select practice_id::text as practice_id, count(*)::int as rows
-  from vd_patient_demographics group by practice_id order by practice_id`;
+  select vd.practice_id::text as practice_id, vd.rows
+  from (
+    select practice_id, count(*)::int as rows
+    from vd_patient_demographics group by practice_id
+  ) vd
+  join (select distinct practice_id from spidx) sp on sp.practice_id = vd.practice_id
+  order by vd.practice_id`;
 const spidxPractices = count(await owner`select count(distinct practice_id)::text as n from spidx`);
 if (practices.length < MIN_PRACTICES || spidxPractices < MIN_PRACTICES) {
   await owner.end({ timeout: 5 });
   await app.end({ timeout: 5 });
   fail(
     EVAL_ID,
-    `need >= ${String(MIN_PRACTICES)} seeded practices in vd_patient_demographics (found ${String(practices.length)}) AND spidx (found ${String(spidxPractices)}) — boot order (seed + projections:rebuild) missing?`
+    `need >= ${String(MIN_PRACTICES)} practices carrying BOTH vd_patient_demographics and spidx rows (found ${String(practices.length)}) AND >= ${String(MIN_PRACTICES)} practices in spidx (found ${String(spidxPractices)}) — boot order (seed + projections:rebuild) missing?`
   );
 }
 const practiceA = String(practices[0]?.practice_id);
