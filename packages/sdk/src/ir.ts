@@ -30,7 +30,7 @@ export const OPS: readonly OpSpec[] = [
     adapter: "opProposeResource",
     inputType: "ProposeResourceInput",
     resultType: "ProposeResourceResult",
-    doc: "Propose a typed clinical write (BF-03 writeScribeResource). The write lands in the tenant's canonical FHIR store when the call returns; approve/commit governance is BF-09."
+    doc: "Stage a typed clinical write as a BF-09 governance proposal (proposeRecord). Nothing reaches the canonical FHIR store until a clinician approves and commits the proposal; the returned record carries the proposal id and state 'proposed'."
   },
   {
     method: "searchClinical",

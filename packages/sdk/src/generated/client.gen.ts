@@ -20,7 +20,7 @@ import { runOp } from "../run-op.js";
 export interface BonfireClient {
   /** Build a span-cited context projection (BF-07 buildCcp) from a scoped search response. */
   buildCcp(input: BuildCcpInput): Promise<BuildCcpResult>;
-  /** Propose a typed clinical write (BF-03 writeScribeResource). The write lands in the tenant's canonical FHIR store when the call returns; approve/commit governance is BF-09. */
+  /** Stage a typed clinical write as a BF-09 governance proposal (proposeRecord). Nothing reaches the canonical FHIR store until a clinician approves and commits the proposal; the returned record carries the proposal id and state 'proposed'. */
   proposeResource(input: ProposeResourceInput): Promise<ProposeResourceResult>;
   /** Run the scope-before-retrieve cited hybrid search (BF-06 searchClinical). */
   searchClinical(input: SearchClinicalInput): Promise<SearchClinicalResult>;
