@@ -5,7 +5,7 @@
 > `loop ratchet` (and the test suite): if the guard artifact disappears,
 > the check fails and the bug is considered reopened.
 
-36 guarded · 1 open (debt owed a guard)
+38 guarded · 1 open (debt owed a guard)
 
 ## BP-001 — gate-crash-read-as-pass — GUARDED
 
@@ -301,4 +301,20 @@
 - Root cause: A line-structured artifact fed to an LLM interpolated attacker-influenced, only length/enum-bounded (never charset-bounded) strings from the untrusted BF-06 SearchResponse boundary directly into template lines; a newline breaks out of the intended line.
 - Fix: BF-07: JSON.stringify all three interpolations (matching the span-value Class-5 pattern) so each stays a single escaped token and the document is losslessly invertible. The ast-grep rule no-raw-response-string-in-ccp-serialize bans a bare ${x} interpolation inside serialize.ts (the JSON.stringify(x) form is clean, via inside: template_substitution stopBy: neighbor). The bf07-text-invertible Stage-2 eval is the live proof: a forged excludedByPolicy reason + 64-char auditEventId with embedded newlines produce ZERO forged group/span lines and doc.text inverts losslessly to the exact span set.
 - Guard: `ast-grep` → `sgrules/no-raw-response-string-in-ccp-serialize.yml`
+- Recorded: 2026-07-10
+
+## BP-038 — mcp-egress — GUARDED
+
+- Symptom: The local MCP server is the first place an untrusted agent enters the system. Its contract is a narrow propose-only typed tool allowlist with NO raw SQL, FHIRPath, shell, or filesystem access, but nothing structurally prevented a handler (or a later edit) from importing node:child_process, node:fs, or a network client and turning a tool call into shell execution, arbitrary file reads, or PHI egress off-box.
+- Root cause: Capability was governed only by the shape of the three tool schemas, i.e. by convention. The MCP package's module surface was unconstrained, so any new import silently widened what a tool handler could reach. The vectors split in two: IMPORT-reachable (node builtins, undici/axios, hosted-model SDKs) and GLOBAL-reachable (fetch, WebSocket, EventSource, Bun.spawn/$/file/write/connect), the latter needing no import at all.
+- Fix: Two complementary ast-grep guards scoped to packages/mcp/src (tests exempt: they spy to prove the invariants). sgrules/no-egress-in-mcp.yml bans the named import vectors AND the global-reachable ones (fetch/globalThis.fetch/WebSocket/EventSource/Bun.spawn/Bun.spawnSync/Bun.$/Bun.file/Bun.write/Bun.connect/Bun.listen) plus require()/dynamic import() of the banned modules. Its sibling BP-039 supplies the positive control on the import surface.
+- Guard: `ast-grep` → `sgrules/no-egress-in-mcp.yml`
+- Recorded: 2026-07-10
+
+## BP-039 — mcp-import-surface — GUARDED
+
+- Symptom: A denylist of banned imports (BP-038) is only ever as good as its enumeration: a network client it never heard of, a transitive re-export, or a package added next quarter slides straight through the agent-facing boundary. The guard silently fails OPEN on anything unnamed.
+- Root cause: Denylists invert the burden of proof. The correct posture at a trust boundary is an allowlist: enumerate what the MCP server legitimately needs (its own modules, @bonfire/sdk, @bonfire/core, @modelcontextprotocol/sdk, zod) and fail closed on everything else, so a new dependency must be reviewed IN to be reachable. NOTE the same control expressed as a dependency-cruiser rule is INERT and was rejected: .dependency-cruiser.cjs sets options.includeOnly to the source dirs, which filters node builtins and node_modules out of the graph entirely, so a `from packages/mcp/src, to node:fs` edge is never a candidate and the rule can never fire (proven by injecting the import: depcruise still reported no violations).
+- Fix: sgrules/mcp-import-allowlist.yml: under packages/mcp/src (tests exempt), any import_statement or export_statement whose source is not one of ./ ../ @bonfire/sdk @bonfire/core @modelcontextprotocol/sdk[/...] zod fails the structural gate. ast-grep sees every specifier, including node builtins. Inversion-proven: clean tree -> `ast-grep scan` exit 0; a real `import { readFileSync } from "node:fs"` in server.ts -> exit 1 (both this rule and BP-038 fire); restored -> exit 0.
+- Guard: `ast-grep` → `sgrules/mcp-import-allowlist.yml`
 - Recorded: 2026-07-10
