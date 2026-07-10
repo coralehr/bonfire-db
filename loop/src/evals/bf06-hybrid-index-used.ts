@@ -75,14 +75,14 @@ try {
   const checks: [string, boolean][] = [
     ["HNSW index in the semantic arm", plan.includes("Index Scan using search_doc_hnsw")],
     ["lexical arm wired to the GIN content_tsv predicate", plan.includes("content_tsv @@")],
-    // The only aggregate (row_number is a WindowAgg /Aggregate/ excludes) computes
+    // The only aggregate ("Aggregate" excludes the row_number WindowAgg) computes
     // the fused score. Plan shape follows the SHARED search_doc's stats, so the
     // planner renders the fused Sort Key as either the `rrf` alias or an inlined
     // `sum(1.0/...)`; the old literal-`1.0`+`Hash|GroupAggregate` check went falsely
     // red on the alias form. Float-vs-int RRF (T1) is covered by the ranking evals.
     [
       "RRF fusion aggregate",
-      /Aggregate/.test(plan) && (plan.includes("rrf") || plan.includes("1.0"))
+      plan.includes("Aggregate") && (plan.includes("rrf") || plan.includes("1.0"))
     ],
     ["inline resource_type scope predicate", plan.includes("resource_type")],
     ["RLS safe_uuid GUC predicate", /InitPlan|safe_uuid|current_setting/.test(plan)],
