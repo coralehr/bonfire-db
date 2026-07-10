@@ -1,0 +1,22 @@
+# Behaviour tests for no-raw-response-string-in-ccp-serialize (ratchet BP-037). Run:
+# bunx ast-grep test --skip-snapshot-tests
+# Path scoping (files) does not apply to inline cases — these prove the PATTERN: a
+# response-derived field is SAFE only wrapped in JSON.stringify(...) inside a template
+# substitution, and BANNED when interpolated bare. The scoping to serialize.ts lives in the rule.
+id: no-raw-response-string-in-ccp-serialize
+valid:
+  # The safe form: every field JSON-encoded (member is nested in a call, not the raw substitution).
+  - |
+    const l = `CCP v1 audit=${JSON.stringify(header.sourceAuditEventId)}`;
+  - |
+    const w = `${JSON.stringify(entry.resourceType)}(${JSON.stringify(entry.reason)})`;
+  - |
+    const s = `  ${span.jsonPath}: ${JSON.stringify(span.value)}`;
+invalid:
+  # Bare interpolation of an untrusted response-derived string.
+  - |
+    const l = `CCP v1 audit=${header.sourceAuditEventId}`;
+  - |
+    const w = `${entry.resourceType}(x)`;
+  - |
+    const w = `x(${entry.reason})`;
