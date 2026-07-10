@@ -1,8 +1,9 @@
 /**
  * @bonfire/mcp — the local propose-only MCP server over @bonfire/sdk's
- * session-bound client.
- *
- * Operator-prep scaffold: the BF-08 maker replaces this placeholder with the
- * static tool allowlist, the per-session server factory, and the stdio entry.
+ * session-bound client. The public surface is the per-session server factory
+ * plus the static three-tool allowlist; the stdio entry lives in main.ts.
  */
-export type { BonfireError, Result } from "@bonfire/core";
+export type { BonfireMcpDeps } from "./server.js";
+export { createBonfireMcpServer, createStdioTransport } from "./server.js";
+export type { ToolDef, ToolName, ToolResult, ToolTextContent } from "./tools.js";
+export { ALLOWLIST } from "./tools.js";

@@ -22,7 +22,9 @@
     "typecheck": "tsc -b --noEmit",
     "lint": "eslint .",
     "test": "bun test --pass-with-no-tests",
-    "gate": "echo gated"
+    "gen": "bun run src/gen/main.ts",
+    "api:update": "api-extractor run --local",
+    "gate": "api-extractor run"
   },
   "dependencies": {
     "@bonfire/core": "workspace:*",
