@@ -110,6 +110,30 @@ describe("useClinicalQuery (LISTEN/NOTIFY, tenant-scoped)", () => {
     for (const view of CLINICAL_VIEWS) expect(materialized.has(view)).toBe(true);
   });
 
+  test("every whitelisted view carries the (id, row_index) total order loadRows assumes", async () => {
+    // loadRows orders EVERY view by (id, row_index). A view missing either
+    // column would error -> the store keeps a stale snapshot forever (fail-safe,
+    // never cross-tenant, but silently non-reactive). Only one view is exercised
+    // end-to-end below, so pin the column convention for all eight here.
+    const ordered = await db.withTenant(practiceA, (sql) => {
+      return sql<{ table_name: string; column_name: string }[]>`
+        select table_name, column_name from information_schema.columns
+        where table_schema = 'public'
+          and table_name = any(${[...CLINICAL_VIEWS]}::text[])
+          and column_name in ('id', 'row_index')`;
+    });
+    if (!ordered.ok) throw new Error(ordered.error.code);
+    const columnsByView = new Map<string, Set<string>>();
+    for (const row of ordered.data) {
+      const seen = columnsByView.get(row.table_name) ?? new Set<string>();
+      seen.add(row.column_name);
+      columnsByView.set(row.table_name, seen);
+    }
+    for (const view of CLINICAL_VIEWS) {
+      expect([...(columnsByView.get(view) ?? [])].sort()).toEqual(["id", "row_index"]);
+    }
+  });
+
   test("same-practice update emits a fresh snapshot within 2s", async () => {
     const store = await openStore(db);
     const family = `Fresh${randomUUID().slice(0, 8)}`;

@@ -1,0 +1,51 @@
+# Behaviour tests for mcp-import-allowlist (BF-08, ratchet candidate BP-039).
+# Run: bunx ast-grep test --skip-snapshot-tests
+# Path scoping (files/ignores) does not apply to inline cases — these prove the
+# PATTERNS; the mcp-only + test-exempt scoping lives in the rule. VALID = the
+# five permitted specifier shapes. INVALID = everything else, including node
+# builtins the sibling denylist happens to name AND ones it does not.
+id: mcp-import-allowlist
+valid:
+  - |
+    import { z } from "zod";
+  - |
+    import { authenticate, createBonfireClient } from "@bonfire/sdk";
+  - |
+    import type { BonfireSession } from "@bonfire/sdk";
+  - |
+    import { connectTenantDb } from "@bonfire/core";
+  - |
+    import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+  - |
+    import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+  - |
+    import { ALLOWLIST } from "./tools.js";
+  - |
+    import type { ToolDef } from "../tools.js";
+  - |
+    export { createBonfireMcpServer } from "./server.js";
+  - |
+    export type { ToolName } from "./tools.js";
+invalid:
+  - |
+    import { readFileSync } from "node:fs";
+  - |
+    import { execSync } from "node:child_process";
+  - |
+    import http from "node:http";
+  - |
+    import { request } from "undici";
+  - |
+    import OpenAI from "openai";
+  - |
+    import postgres from "postgres";
+  - |
+    import { createHash } from "node:crypto";
+  - |
+    import lodash from "lodash";
+  - |
+    import { deepMerge } from "some-transitive-helper";
+  - |
+    export { readFileSync } from "node:fs";
+  - |
+    export * from "node:child_process";

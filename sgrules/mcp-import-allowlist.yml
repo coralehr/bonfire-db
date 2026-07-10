@@ -1,0 +1,56 @@
+# POSITIVE CONTROL on the agent-facing import surface (BF-08 security audit;
+# ratchet candidate BP-039). packages/mcp/src is the first place an untrusted
+# agent's requests enter the system. Its sibling rule no-egress-in-mcp is a
+# DENYLIST (it names node:child_process, node:fs, undici, ...), and a denylist
+# is evadable by anything it forgot: a differently-named network client, a
+# transitive re-export, a package added next quarter. This rule inverts the
+# posture: ANY import specifier that is not explicitly permitted fails the
+# gate, so a new egress vector fails CLOSED instead of sliding through.
+#
+# The permitted surface is exactly what the MCP server needs to exist:
+#   - its own modules (relative ./ and ../ specifiers)
+#   - @bonfire/sdk        the session-bound client = the identity/tenant boundary
+#   - @bonfire/core       published types, schemas, and the tenant db handle
+#   - @modelcontextprotocol/sdk[/...]  the transport itself
+#   - zod                 the strict tool-argument schemas
+# NOTHING else — no node builtins (there is no legitimate fs/shell/net need in
+# a tool handler), no HTTP clients, no hosted-model SDKs. Tests are exempt:
+# they import postgres/node:crypto to seed hermetically and to PROVE these
+# invariants. Both import and export-from forms are covered; the denylist rule
+# still catches the non-import vectors (fetch(), Bun.spawn, dynamic import()).
+id: mcp-import-allowlist
+language: TypeScript
+severity: error
+message: Non-allowlisted import in the MCP server — packages/mcp/src may import only @bonfire/sdk, @bonfire/core, @modelcontextprotocol/sdk, zod, and its own modules.
+note: |
+  The agent-facing boundary uses an import ALLOWLIST, not a denylist. If this
+  fires, the import you added is not on the permitted surface. A tool handler
+  needs no filesystem, shell, or network access: it composes @bonfire/sdk's
+  session-bound client, whose every call is RLS-scoped and audited. If a new
+  dependency is genuinely required, it must be reviewed and added here
+  explicitly — that review is the point of the rule.
+metadata:
+  slop-pattern: mcp-import-surface
+  gate-stage: 1
+files:
+  - "packages/mcp/src/**"
+ignores:
+  - "**/*.test.ts"
+  - "**/*.test.tsx"
+rule:
+  any:
+    # An import whose specifier is not on the permitted surface. The negation
+    # lives inside `has` so the matcher stays anchored on a real node (the
+    # string literal), and a bare `export { x }` (no source) never matches.
+    - kind: import_statement
+      has:
+        field: source
+        kind: string
+        not:
+          regex: '^"(\.{1,2}/[^"]*|@bonfire/(sdk|core)|@modelcontextprotocol/sdk(/[^"]*)?|zod)"$'
+    - kind: export_statement
+      has:
+        field: source
+        kind: string
+        not:
+          regex: '^"(\.{1,2}/[^"]*|@bonfire/(sdk|core)|@modelcontextprotocol/sdk(/[^"]*)?|zod)"$'

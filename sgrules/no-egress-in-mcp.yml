@@ -59,3 +59,8 @@ rule:
     - pattern: new EventSource($$$ARGS)
     - pattern: Bun.spawn($$$ARGS)
     - pattern: Bun.spawnSync($$$ARGS)
+    - pattern: Bun.$`$$$CMD`
+    - pattern: Bun.file($$$ARGS)
+    - pattern: Bun.write($$$ARGS)
+    - pattern: Bun.connect($$$ARGS)
+    - pattern: Bun.listen($$$ARGS)

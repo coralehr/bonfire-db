@@ -18,8 +18,8 @@
  * ceiling is ever hit. close() unlistens, but only db.end() on the listener's
  * owning client reclaims the socket.
  */
-import type { BonfireError, Result, TenantDb } from "@bonfire/core";
-import { err, ok, sha256Hex } from "@bonfire/core";
+import type { BonfireError, JsonValue, Result, TenantDb } from "@bonfire/core";
+import { canonicalizeJson, err, ok, sha256Hex } from "@bonfire/core";
 import { z } from "zod";
 import type { BonfireSession } from "../auth/session.js";
 import type { ClinicalView } from "./views.js";
@@ -108,9 +108,23 @@ async function loadRows(state: StoreState): Promise<readonly ClinicalRow[] | nul
   return result.ok ? result.data : null;
 }
 
+/**
+ * The snapshot digest. The JSON round-trip FIRST normalizes driver-native
+ * values into JSON leaves (a timestamptz arrives as a JS Date, whose toJSON
+ * yields an ISO string); canonicalizeJson then emits RFC-8785 form with sorted
+ * keys, so the digest cannot drift on column/key order alone. Canonicalizing
+ * the driver rows directly would be WRONG: a Date has no own enumerable keys,
+ * so it would serialize as `{}` and every timestamp would collapse to the same
+ * bytes — a change in `last_updated` alone would then emit nothing.
+ */
+function snapshotDigest(rows: readonly ClinicalRow[]): string {
+  const jsonLeaves = JSON.parse(JSON.stringify(rows)) as JsonValue;
+  return sha256Hex(canonicalizeJson(jsonLeaves));
+}
+
 /** Emit to subscribers ONLY when the scoped snapshot content actually changed. */
 function emitIfChanged(state: StoreState, rows: readonly ClinicalRow[]): void {
-  const nextHash = sha256Hex(JSON.stringify(rows));
+  const nextHash = snapshotDigest(rows);
   if (nextHash === state.contentHash) return;
   state.contentHash = nextHash;
   state.snapshot = { rows };

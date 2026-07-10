@@ -207,9 +207,14 @@ const proposeResourceTool = defineTool({
   }
 });
 
-/** EXACTLY three tools; iterating this array is the ONLY registration path. */
-export const ALLOWLIST: readonly ToolDef[] = [
+/**
+ * EXACTLY three tools; iterating this array is the ONLY registration path.
+ * Frozen so the allowlist is immutable at RUNTIME too, not merely `readonly`
+ * to the type checker — an in-process consumer cannot push a fourth tool onto
+ * the surface a session already registered.
+ */
+export const ALLOWLIST: readonly ToolDef[] = Object.freeze([
   searchClinicalTool,
   getContextTool,
   proposeResourceTool
-];
+]);
