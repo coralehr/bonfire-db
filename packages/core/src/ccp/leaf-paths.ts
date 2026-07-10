@@ -48,10 +48,17 @@ function step(current: JsonValue, segment: string): JsonValue | undefined {
 
 /**
  * Walk a declared dotted path. Returns the scalar leaf, or undefined when the
- * path does not resolve (missing field, null, or a scalar mid-path). A declared
- * path resolving to an object or array is a programmer error in the table
- * (Class 4a) and THROWS: a non-scalar leaf could smuggle a `system` URI or a
- * reference id into a span, so the walk refuses to return one.
+ * path does not resolve (missing field, null, or a scalar mid-path) OR resolves
+ * to a non-scalar. A non-scalar is fail-closed SKIPPED, never returned: the
+ * write path (`fhirContentSchema`) accepts arbitrary nested JSON, so a same-
+ * tenant writer can persist a subtree (e.g. `valueString: {}`) where the table
+ * expects a scalar. Returning it would smuggle a `system` URI or reference id
+ * into a span (Class 4a) AND — since there is no try/catch around extraction —
+ * throwing would escape buildCcp's Result boundary (acceptance #1) and skip the
+ * post-read audit append (T8). Skipping the span keeps both invariants: the
+ * value is never emitted, and the build still returns a Result and audits. A
+ * declared path that points at a non-scalar in WELL-FORMED FHIR is table drift,
+ * caught by the static LEAF_PATHS coverage test, not at runtime on hostile data.
  */
 export function resolvePath(content: JsonObject, path: string): CcpSpanValue | undefined {
   let current: JsonValue | undefined = content;
@@ -60,8 +67,6 @@ export function resolvePath(content: JsonObject, path: string): CcpSpanValue | u
     current = step(current, segment);
   }
   if (current === undefined || current === null) return undefined;
-  if (typeof current === "object") {
-    throw new Error(`declared CCP leaf path resolved to a non-scalar: ${path}`);
-  }
+  if (typeof current === "object") return undefined;
   return current;
 }

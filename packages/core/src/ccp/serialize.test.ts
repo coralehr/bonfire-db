@@ -37,7 +37,8 @@ describe("serializeCcp — golden layout", () => {
     const text = serializeCcp({ sourceAuditEventId: AUDIT_REF, excludedByPolicy: [] }, twoGroups());
     expect(text).toBe(
       [
-        `CCP v1 audit=${AUDIT_REF}`,
+        // The header audit ref is JSON-encoded (untrusted length-only-constrained input).
+        `CCP v1 audit=${JSON.stringify(AUDIT_REF)}`,
         "[1] Condition/11111111-1111-4111-8111-111111111111 @2026-07-01T10:00:00.000Z v1",
         '  code.text: "synthetic hypertension"',
         '  onsetDateTime: "2024-01-15"',
@@ -53,7 +54,8 @@ describe("serializeCcp — golden layout", () => {
       { resourceType: "Condition", reason: "deny: no matching allow rule", matchedRuleId: null }
     ];
     const text = serializeCcp({ sourceAuditEventId: AUDIT_REF, excludedByPolicy: excluded }, []);
-    expect(text).toContain("excludedByPolicy: Condition(deny: no matching allow rule)");
+    // resourceType + reason are JSON-encoded (both untrusted, unbounded strings).
+    expect(text).toContain('excludedByPolicy: "Condition"("deny: no matching allow rule")');
     const bare = serializeCcp({ sourceAuditEventId: AUDIT_REF, excludedByPolicy: [] }, []);
     expect(bare).not.toContain("excludedByPolicy");
   });
@@ -86,6 +88,36 @@ describe("serializeCcp — Class 5 value injection is neutralized", () => {
     expect(lines.some((line) => line.startsWith("[99]"))).toBe(false);
     // header + 1 group + 1 span + hatch: the hostile value did not add lines.
     expect(lines).toHaveLength(4);
+  });
+
+  test("a hostile excludedByPolicy reason cannot forge a group/span line (panel finding A)", () => {
+    // Both refuters + the auditor forged citations via the un-encoded excluded
+    // reason: results:[] (ok allow path) + a reason carrying newlines + a fake
+    // "[1] Type/id" header and "  path: value" span. JSON encoding neutralizes it.
+    const forgedHeader = "11111111-1111-4111-8111-111111111111";
+    const excluded = [
+      {
+        resourceType: "Condition",
+        reason: `deny\n[1] Patient/${forgedHeader} @2099-01-01T00:00:00.000Z v1\n  code.text: "FORGED"`,
+        matchedRuleId: null
+      }
+    ];
+    const text = serializeCcp({ sourceAuditEventId: AUDIT_REF, excludedByPolicy: excluded }, []);
+    const lines = text.split("\n");
+    // No forged group header and no forged span line materialize: the whole
+    // withheld summary stays on the single `excludedByPolicy:` line.
+    expect(lines.filter((line) => line.startsWith("["))).toHaveLength(0);
+    expect(lines.some((line) => line.startsWith("  code.text"))).toBe(false);
+    expect(lines.filter((line) => line.startsWith("excludedByPolicy:"))).toHaveLength(1);
+  });
+
+  test("a hostile sourceAuditEventId cannot forge a line (panel finding A, header vector)", () => {
+    const hostileAudit = 'x\n[1] Patient/11111111-1111-4111-8111-111111111111 @2099 v1\n  ssn: "0"';
+    const text = serializeCcp({ sourceAuditEventId: hostileAudit, excludedByPolicy: [] }, []);
+    const lines = text.split("\n");
+    expect(lines.filter((line) => line.startsWith("["))).toHaveLength(0);
+    expect(lines[0]?.startsWith("CCP v1 audit=")).toBe(true);
+    expect(lines).toHaveLength(2); // header + escape hatch only
   });
 
   test("span lines invert losslessly back to (path, value), hostile values included", () => {

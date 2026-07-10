@@ -547,6 +547,34 @@ describe("BF-07 scope guards (acceptance #8 — no leak, no scope-after-retrieve
   });
 });
 
+describe("BF-07 non-scalar stored leaf (panel finding B — boundary + audit hold)", () => {
+  test("a cited non-scalar declared leaf skips its span, returns ok, audits once (no throw)", async () => {
+    const practice = randomUUID();
+    // fhirContentSchema accepts arbitrary JSON, so a same-tenant writer can store a
+    // subtree where a scalar leaf is declared. buildCcp must SKIP the span, not throw
+    // past the Result boundary (acceptance #1) or skip the audit append (T8).
+    const poisoned = synthDoc("Observation", {
+      code: { coding: [{ system: SYNTH, code: "ccptok-bad", display: "Ccptok poisoned obs" }] },
+      valueQuantity: { value: 9.5, unit: "mmol/L" },
+      valueString: { nested: "not-a-scalar" },
+      note: [{ text: "ccptok poisoned" }]
+    });
+    await seedCorpus(practice, [poisoned]);
+    const run = await withPractice(practice, async (sql) => {
+      const response = await searchTreat(sql, practice);
+      return trackedBuild(sql, inputFor(response, practice));
+    });
+    const doc = unwrapOk(run.outcome); // it returned a Result — it did NOT throw
+    expect(run.auditDelta).toBe(1); // T8: exactly one audit row despite the skipped leaf
+    // the non-scalar leaf never materializes and its subtree never leaks into the doc
+    expect(doc.spans.some((span) => span.jsonPath === "valueString")).toBe(false);
+    expect(doc.text).not.toContain("not-a-scalar");
+    expect(JSON.stringify(doc.spans)).not.toContain("not-a-scalar");
+    // the well-formed sibling leaves on the same resource still project
+    expect(doc.spans.some((span) => span.jsonPath === "valueQuantity.value")).toBe(true);
+  });
+});
+
 describe("BF-07 token residual on the live build (acceptance #7)", () => {
   test("the built document measures >= 1.4x smaller than compact JSON of its spans", async () => {
     const practice = randomUUID();

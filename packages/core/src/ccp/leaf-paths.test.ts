@@ -45,12 +45,22 @@ describe("resolvePath — declared dotted-path walk", () => {
     expect(resolvePath({ status: "final" }, "status.coding.0.code")).toBeUndefined();
   });
 
-  test("a declared path resolving to an OBJECT throws (Class 4a, non-scalar leaf)", () => {
-    expect(() => resolvePath(condition, "code.coding.0")).toThrow(/non-scalar/);
+  test("a path resolving to an OBJECT is fail-closed skipped, never returned (Class 4a)", () => {
+    // Untrusted stored content can put a subtree where a scalar is declared. The
+    // walk returns undefined (skip) rather than throwing (panel finding B): the
+    // non-scalar is never emitted, and buildCcp keeps its Result boundary + audit.
+    expect(resolvePath(condition, "code.coding.0")).toBeUndefined();
   });
 
-  test("a declared path resolving to an ARRAY throws (Class 4a, non-scalar leaf)", () => {
-    expect(() => resolvePath(condition, "code.coding")).toThrow(/non-scalar/);
+  test("a path resolving to an ARRAY is fail-closed skipped, never returned (Class 4a)", () => {
+    expect(resolvePath(condition, "code.coding")).toBeUndefined();
+  });
+
+  test("a hostile non-scalar stored at a declared leaf is skipped (panel finding B)", () => {
+    // e.g. a same-tenant writer persists Observation.valueString = {} (fhirContentSchema
+    // accepts arbitrary JSON). The declared leaf must skip, not throw.
+    expect(resolvePath({ valueString: { nested: "obj" } }, "valueString")).toBeUndefined();
+    expect(resolvePath({ note: [{ text: ["a", "b"] }] }, "note.0.text")).toBeUndefined();
   });
 });
 

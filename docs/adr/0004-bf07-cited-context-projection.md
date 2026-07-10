@@ -102,3 +102,48 @@ decisions and their honest limits.
 - **v0 policy is all-or-nothing per subject**, so `SCOPE_EXCLUDED_TYPE` is
   exercised via a role swap today; per-type partial scopes arrive with the
   forbid rules.
+
+## Panel findings resolved (adversarial review wave)
+
+Five review agents (verifier, security-auditor, three refuters) audited the
+maker HEAD. Two real breaks were found by three independent agents and fixed on
+this branch; the rest are disclosed accepted residuals.
+
+- **Finding A (HIGH, fixed) — serializer line-injection.** The header
+  `sourceAuditEventId` and the withheld-type `resourceType`/`reason` arrive on
+  the untrusted SearchResponse boundary but were interpolated raw, so a hostile
+  `reason` containing newlines could forge `[n] Type/id` group headers and
+  `  path: value` span lines into the agent-consumed text — which the content
+  digest would then notarize. Fixed by JSON-encoding all three (the existing
+  span-value Class-5 pattern), keeping the document losslessly invertible.
+  Guarded by two serialize injection tests (finding A) that redden on raw
+  interpolation.
+- **Finding B (MED, fixed) — non-scalar leaf threw past the boundary.** The
+  write path accepts arbitrary nested JSON, so a same-tenant writer can store a
+  subtree where a scalar leaf is declared; `resolvePath` threw on it, escaping
+  buildCcp's Result boundary (acceptance #1) before the audit append (T8). Fixed
+  by fail-closed SKIP (return undefined — the value is still never emitted).
+  Guarded by a DB test proving a cited non-scalar leaf yields an audited ok
+  document with the span skipped and no throw.
+
+## Accepted residuals (disclosed, not defects)
+
+- **App-level type scope check (auditor LOW).** buildCcp reads the id-set under
+  FORCE RLS (tenant-scoped in SQL) and then checks each resolved row's CANONICAL
+  type against the re-derived ABAC scope in app code. This is deliberate: binding
+  the check to the stored type (not the attacker-claimed `hit.resourceType`)
+  catches both type confusion and policy-excluded types in one place and keeps
+  `SCOPE_EXCLUDED_TYPE` distinct from `UNRESOLVED_RESULT`. The rows are a small,
+  id-specific, same-tenant set (not the broad-candidate over-fetch the
+  scope-before-retrieve rule targets), never emitted, and the build fails closed.
+- **CCP trusts the in-process SearchResponse (subject + receipt).** buildCcp
+  re-derives scope and cross-checks the response receipt, but it trusts that the
+  caller populates `subject` from the BF-13 verified membership rather than
+  echoing client input. A forged response can only widen or misrepresent its OWN
+  tenant's read (RLS bounds every row to the GUC practice) — never cross-tenant.
+  The subject-from-membership caller contract is the same follow-up BF-06 owes.
+- **>=1.4x is a golden-set property.** A single dominant-value span (one very
+  long `valueString`/`note.text`) can push the ratio below 1.0 because CCP's
+  fixed chrome cannot be amortized; the contract scopes the claim to the golden
+  fixture set, and `measureCcp` is a measurement hook never called inside
+  buildCcp.
