@@ -90,6 +90,19 @@ export type { JsonDiffKind, RoundTripDiff } from "./fhir/roundtrip-diff.js";
 export { decimalDiffs, structuralDiffs } from "./fhir/roundtrip-diff.js";
 export type { ScribeInput, ScribeResourceType } from "./fhir/scribe-schemas.js";
 export { scribeInputSchema } from "./fhir/scribe-schemas.js";
+export { decideGovernance, transition } from "./governance/policy.js";
+export { approveProposal, commitProposal, proposeRecord } from "./governance/store.js";
+export type {
+  GovernanceAction,
+  GovernanceActor,
+  GovernanceError,
+  GovernanceErrorCode,
+  GovernanceRole,
+  GovernanceState,
+  ProposalRecord,
+  SignedNote
+} from "./governance/types.js";
+export { GOVERNANCE_ROLES, GOVERNANCE_STATES, signedNoteSchema } from "./governance/types.js";
 export type { BonfireError, Result } from "./result.js";
 export { err, ok } from "./result.js";
 export type { DerivedScope, ScopeSubject } from "./search/derive-scope.js";
