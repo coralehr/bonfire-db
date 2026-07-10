@@ -75,7 +75,19 @@ try {
   const checks: [string, boolean][] = [
     ["HNSW index in the semantic arm", plan.includes("Index Scan using search_doc_hnsw")],
     ["lexical arm wired to the GIN content_tsv predicate", plan.includes("content_tsv @@")],
-    ["RRF float fusion", plan.includes("1.0") && /GroupAggregate|HashAggregate/.test(plan)],
+    // The RRF fusion is proven by the group-by aggregate that computes the fused
+    // score — structure the query FORCES (the ONLY aggregate here; row_number is a
+    // WindowAgg, which /Aggregate/ does not match). The plan is chosen on the
+    // SHARED search_doc table's stats (then RLS-filtered to this practice at
+    // execution), so as other suites commit rows the planner reshapes BOTH the
+    // aggregate strategy (Hash- vs GroupAggregate) AND how it renders the fused
+    // score in the final Sort Key — sometimes the alias `fused.rrf`, sometimes the
+    // inlined expression `sum((1.0 / ((60 + rank))...))`. The old check keyed on
+    // the literal `1.0` AND `Hash|GroupAggregate` and went falsely red whenever the
+    // alias form appeared. `/Aggregate/` covers every aggregate strategy; the
+    // disjunction covers both render forms. Float-vs-integer RRF correctness (T1)
+    // is a FUNCTIONAL property the ranking + determinism evals verify, not a grep.
+    ["RRF fusion aggregate", /Aggregate/.test(plan) && (plan.includes("rrf") || plan.includes("1.0"))],
     ["inline resource_type scope predicate", plan.includes("resource_type")],
     ["RLS safe_uuid GUC predicate", /InitPlan|safe_uuid|current_setting/.test(plan)],
     ["no fhir_resources scan", !plan.includes("fhir_resources")]
