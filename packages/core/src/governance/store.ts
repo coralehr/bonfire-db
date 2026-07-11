@@ -69,11 +69,26 @@ async function boundPracticeId(sql: TenantSql): Promise<string> {
   return parsed.data.practice_id;
 }
 
+/** Parse the untrusted actor to a snapshot ONCE; a thrown getter yields undefined (→ deny). */
+function snapshotActor(rawActor: unknown): GovernanceActor | undefined {
+  try {
+    const parsed = governanceActorSchema.safeParse(rawActor);
+    return parsed.success ? parsed.data : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
- * Decide + audit one governance attempt. A deny appends the deny receipt and
- * returns err — a VALUE, so the deny row commits with zero mutations. An allow
- * returns the receipt UNAPPENDED: the caller appends it immediately before its
- * own mutation inserts (the zero-or-one-row contract).
+ * Decide + audit one governance attempt. The untrusted actor is read exactly
+ * ONCE into a frozen snapshot: that snapshot is both what the decision is
+ * attributed to AND what the caller records in the event/signed note, so a
+ * value-shifting getter cannot make the audit chain and the governance state
+ * disagree on who acted (the audit_row_hash JOIN only means anything while
+ * audit-actor === state-actor). A deny appends the deny receipt and returns
+ * err — a VALUE, so the deny row commits with zero mutations. An allow returns
+ * the receipt UNAPPENDED: the caller appends it immediately before its own
+ * mutation inserts (the zero-or-one-row contract).
  */
 async function authorizeAttempt(
   sql: TenantSql,
@@ -81,17 +96,22 @@ async function authorizeAttempt(
   action: "propose" | "approve" | "commit"
 ): Promise<Result<AllowedAttempt, GovernanceError>> {
   const practice = await boundPracticeId(sql);
-  const receipt = decideGovernance({ actor: rawActor, action, boundPracticeId: practice });
+  // A snapshot that fails to build (invalid, or a getter that throws) is left as
+  // the raw value for decideGovernance to resolve to its malformed-deny receipt.
+  const snapshot = snapshotActor(rawActor);
+  const receipt = decideGovernance({
+    actor: snapshot ?? rawActor,
+    action,
+    boundPracticeId: practice
+  });
   if (receipt.decision === "deny") {
     await appendAuditRowTx(sql, receipt);
     return err({ code: "GOVERNANCE_FORBIDDEN", message: receipt.reason });
   }
-  const actor = governanceActorSchema.safeParse(rawActor);
-  // An allow implies the actor parsed inside decideGovernance; a second parse
-  // can only diverge for a hostile getter mutating between reads — fail loud,
-  // roll back.
-  if (!actor.success) throw new Error("governance actor changed between decision and persist");
-  return ok({ receipt, actor: actor.data });
+  // An allow is unreachable unless the snapshot parsed — decideGovernance denies
+  // everything it cannot parse — so the event records the audited identity.
+  if (snapshot === undefined) throw new Error("governance allow without a parsed actor");
+  return ok({ receipt, actor: snapshot });
 }
 
 async function insertEvent(

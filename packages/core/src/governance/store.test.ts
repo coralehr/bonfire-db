@@ -124,6 +124,21 @@ async function approvedDraft(
   return { clinician, proposalId };
 }
 
+/** Stage (agent) + approve (clinician) a draft whose FHIR resource id is pinned. */
+async function approvedDraftFor(practice: string, resourceId: string): Promise<string> {
+  const proposalId = unwrap(
+    await committed(practice, (sql) =>
+      proposeRecord(sql, { actor: actorFor("agent", practice), resource: draftPatient(resourceId) })
+    )
+  ).proposalId;
+  unwrap(
+    await committed(practice, (sql) =>
+      approveProposal(sql, { actor: actorFor("clinician", practice), proposalId })
+    )
+  );
+  return proposalId;
+}
+
 describe("propose: honest staging (acceptance #4)", () => {
   test("agent propose -> ok, proposal staged, ONE allow row, fhir_resources untouched", async () => {
     const practice = randomUUID();
@@ -163,6 +178,38 @@ describe("propose: honest staging (acceptance #4)", () => {
     );
     expect(errCode(inner)).toBe("INVALID_SCRIBE_INPUT");
     expect((await auditTrail(practice)).length).toBe(0);
+  });
+
+  test("a value-shifting getter actor can't split audit attribution from the staged proposer", async () => {
+    // The actor is untrusted (`actor: unknown`). A getter that returns a fresh
+    // id on every read would, under a double-parse, let the audit row attribute
+    // the propose to one id while the proposal records another — a forged split
+    // between the tamper-evident chain and the persisted state. The store reads
+    // the actor ONCE, so both must land on the same identity.
+    const practice = randomUUID();
+    let reads = 0;
+    const hostile = {
+      get id(): string {
+        reads += 1;
+        return `agent-${reads}`;
+      },
+      role: "agent",
+      practiceId: practice
+    };
+    const record = unwrap(
+      await committed(practice, (sql) =>
+        proposeRecord(sql, { actor: hostile, resource: draftPatient(randomUUID()) })
+      )
+    );
+    const proposer = await committed(practice, async (sql) => {
+      const rows = await sql<{ proposer_actor_id: string }[]>`
+        select proposer_actor_id from governance_proposal where id = ${record.proposalId}`;
+      return rows[0]?.proposer_actor_id;
+    });
+    const trail = await auditTrail(practice);
+    expect(trail.length).toBe(1);
+    expect(trail[0]?.decision).toBe("allow");
+    expect(trail[0]?.actor_id).toBe(proposer);
   });
 
   test("a cross-practice proposer is denied and the denial commits", async () => {
@@ -363,6 +410,45 @@ describe("full flow + immutability (acceptance #7/#8)", () => {
     });
     expect(stored?.commit_audit_hash).toBe(note.commitAuditHash);
     expect(stored?.approver_actor_id).toBe(clinician.id);
+  });
+
+  test("a duplicate-resource-id commit rolls back wholesale; first note + chain survive", async () => {
+    // Q8 fail-closed: committing a second proposal that carries an already-live
+    // resource id collides on the fhir_resources PK (23505) and THROWS, so the
+    // whole tx rolls back. This pins that a throwing commit can never leave the
+    // FHIR write live while dropping its governance event, and can't corrupt the
+    // first committed note. A softened write (upsert / on-conflict / swallowed
+    // throw) would break it.
+    const practice = randomUUID();
+    const clinician = actorFor("clinician", practice);
+    const sharedId = randomUUID();
+
+    const first = await approvedDraftFor(practice, sharedId);
+    unwrap(
+      await committed(practice, (sql) =>
+        commitProposal(sql, { actor: clinician, proposalId: first })
+      )
+    );
+
+    const second = await approvedDraftFor(practice, sharedId);
+    const chainBefore = (await auditTrail(practice)).map((row) => row.row_hash);
+    const fhirBefore = await fhirCount(practice);
+
+    const faulted = await db.withTenant(practice, (sql) =>
+      commitProposal(sql, { actor: clinician, proposalId: second })
+    );
+    expect(faulted.ok).toBe(false);
+    if (!faulted.ok) expect(faulted.error.code).toBe("TENANT_TX_FAILED");
+
+    // No trace: the allow row, commit event, signed note, AND the fhir write all
+    // rolled back together; the first proposal's committed record is untouched.
+    expect((await auditTrail(practice)).map((row) => row.row_hash)).toEqual(chainBefore);
+    expect(await fhirCount(practice)).toBe(fhirBefore);
+    expect(
+      (await eventRows(practice, second)).filter((event) => event.action === "commit").length
+    ).toBe(0);
+    const report = await committed(practice, (sql) => verifyAuditChainTx(sql));
+    expect(report.ok).toBe(true);
   });
 
   test("after commit: re-approve and re-commit are typed errs, chain LITERALLY unchanged", async () => {
