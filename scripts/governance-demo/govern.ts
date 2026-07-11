@@ -46,17 +46,23 @@ type StepOutcome =
   | { readonly ok: true; readonly data: unknown }
   | { readonly ok: false; readonly error: { readonly code: string; readonly message?: string } };
 
-function flatten<T>(outcome: Result<Result<T, { code: string; message?: string }>, { code: string; message?: string }>): StepOutcome {
+function flatten<T>(
+  outcome: Result<Result<T, { code: string; message?: string }>, { code: string; message?: string }>
+): StepOutcome {
   // withTenant returns a DB/tenant fault as its own err; a governance decision
   // is the inner Result. Surface whichever applies without conflating them.
-  if (!outcome.ok) return { ok: false, error: { code: outcome.error.code, message: outcome.error.message } };
+  if (!outcome.ok)
+    return { ok: false, error: { code: outcome.error.code, message: outcome.error.message } };
   const inner = outcome.data;
   return inner.ok
     ? { ok: true, data: inner.data }
     : { ok: false, error: { code: inner.error.code, message: inner.error.message } };
 }
 
-function runStep(sql: TenantSql, step: Step): Promise<Result<unknown, { code: string; message?: string }>> {
+function runStep(
+  sql: TenantSql,
+  step: Step
+): Promise<Result<unknown, { code: string; message?: string }>> {
   switch (step.op) {
     case "propose":
       return proposeRecord(sql, { actor: step.actor, resource: step.resource });

@@ -132,14 +132,23 @@ try {
 
   // Immutability at the privilege layer: the app role cannot UPDATE or DELETE.
   // The app is GRANTed SELECT,INSERT only, so each of these must raise 42501.
-  const mutations: readonly [string, (tx: TransactionSql<Record<string, never>>) => Promise<unknown>][] = [
-    ["update", (tx) => tx`update governance_signed_note set committer_actor_id = committer_actor_id`],
+  const mutations: readonly [
+    string,
+    (tx: TransactionSql<Record<string, never>>) => Promise<unknown>
+  ][] = [
+    [
+      "update",
+      (tx) => tx`update governance_signed_note set committer_actor_id = committer_actor_id`
+    ],
     ["delete", (tx) => tx`delete from governance_signed_note`]
   ];
   for (const [label, mutate] of mutations) {
     const code = await forbiddenWrite(app, mutate);
     if (code !== APP_INSUFFICIENT_PRIVILEGE) {
-      fail(EVAL_ID, `app ${label} on the note returned ${code}, expected ${APP_INSUFFICIENT_PRIVILEGE}`);
+      fail(
+        EVAL_ID,
+        `app ${label} on the note returned ${code}, expected ${APP_INSUFFICIENT_PRIVILEGE}`
+      );
     }
   }
 
