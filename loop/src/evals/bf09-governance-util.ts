@@ -9,7 +9,7 @@
 
 import type { Sql } from "postgres";
 import postgres from "postgres";
-import { appUrl, fail, ownerUrl, runArtifact } from "./eval-util.js";
+import { appUrl, fail, lastJsonLine, ownerUrl, runArtifact } from "./eval-util.js";
 
 /** A governance actor as the store parses it (id + role + practiceId). */
 export interface Actor {
@@ -60,18 +60,9 @@ export function govern(evalId: string, practiceId: string, steps: readonly Step[
   const job = JSON.stringify({ practiceId, steps });
   const run = runArtifact(evalId, ["bun", "run", "scripts/governance-demo/govern.ts", job]);
   if (run.status !== 0) fail(evalId, `govern.ts exited ${String(run.status)}:\n${run.output}`);
-  const last = run.output
-    .trim()
-    .split("\n")
-    .filter((line) => line.length > 0)
-    .pop();
-  if (last === undefined) fail(evalId, "govern.ts produced no output");
-  let parsed: { results?: StepOutcome[] };
-  try {
-    parsed = JSON.parse(last) as { results?: StepOutcome[] };
-  } catch (_cause) {
-    return fail(evalId, `govern.ts output is not JSON:\n${run.output}`);
-  }
+  // lastJsonLine (shared) tolerates a leading DB notice and fails loud on a
+  // non-JSON tail; a governance DENY is structured data on that JSON line.
+  const parsed = lastJsonLine(evalId, run.output) as { results?: StepOutcome[] };
   if (parsed.results === undefined) fail(evalId, `govern.ts output has no results:\n${run.output}`);
   return parsed.results;
 }
@@ -81,13 +72,7 @@ export function mcpToolNames(evalId: string): string[] {
   const run = runArtifact(evalId, ["bun", "run", "scripts/governance-demo/mcp-allowlist.ts"]);
   if (run.status !== 0)
     fail(evalId, `mcp-allowlist.ts exited ${String(run.status)}:\n${run.output}`);
-  const last = run.output
-    .trim()
-    .split("\n")
-    .filter((line) => line.length > 0)
-    .pop();
-  if (last === undefined) fail(evalId, "mcp-allowlist.ts produced no output");
-  const parsed = JSON.parse(last) as { tools?: string[] };
+  const parsed = lastJsonLine(evalId, run.output) as { tools?: string[] };
   if (parsed.tools === undefined)
     fail(evalId, `mcp-allowlist.ts output has no tools:\n${run.output}`);
   return parsed.tools;
