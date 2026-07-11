@@ -8,7 +8,7 @@
  * static string — an underlying error message is never forwarded into a model
  * context.
  */
-import type { FhirResourceRecord, SearchResponse } from "@bonfire/core";
+import type { ProposalRecord, SearchResponse } from "@bonfire/core";
 import { PURPOSES_OF_USE, scribeInputSchema } from "@bonfire/core";
 import type { BonfireClient } from "@bonfire/sdk";
 import { z } from "zod";
@@ -57,7 +57,10 @@ export interface ToolDef {
  * in a model context (the BF-07 serializer-injection lesson).
  */
 const ERROR_TEXT: Readonly<Record<string, string>> = {
-  INVALID_SCRIBE_INPUT: "the write input failed schema validation",
+  GOVERNANCE_FORBIDDEN: "the governance action was denied",
+  GOVERNANCE_INVALID_TRANSITION: "the governance action is illegal in the proposal's current state",
+  GOVERNANCE_NOT_FOUND: "no such proposal exists in this practice",
+  INVALID_SCRIBE_INPUT: "the proposed resource failed schema validation",
   MALFORMED_INPUT: "the context request was malformed",
   MCP_INVALID_ARGUMENTS: "tool arguments failed schema validation",
   SDK_UNEXPECTED: "the request failed unexpectedly",
@@ -186,30 +189,24 @@ const getContextTool = defineTool({
 });
 
 /** Exported for the injection canary only; see renderSearchText. */
-export function renderWriteText(record: FhirResourceRecord): string {
+export function renderProposeText(proposal: ProposalRecord): string {
   return [
-    `wrote ${JSON.stringify(record.type)} id=${JSON.stringify(record.id)} versionId=${JSON.stringify(record.versionId)}`,
-    "this resource is live in the practice's canonical FHIR store now"
+    `staged governance proposal id=${JSON.stringify(proposal.proposalId)} state=${JSON.stringify(proposal.state)}`,
+    "this resource is NOT part of the clinical record: a clinician approval and a commit are required before it reaches the canonical FHIR store"
   ].join("\n");
 }
 
 const proposeResourceTool = defineTool({
   name: "propose_resource",
   description:
-    "Write one typed clinical resource into THIS session's practice canonical FHIR store. The write is live the moment this call returns — approve/commit governance (BF-09) does not exist yet. Input is a strict typed scribe resource; the practice is bound server-side from the session.",
+    "Stage one typed clinical resource as a governance PROPOSAL for THIS session's practice. Nothing is written to the canonical FHIR store by this call: the proposal requires a clinician approval and a separate human commit (BF-09 governance) before it becomes part of the clinical record. Input is a strict typed scribe resource; the practice is bound server-side from the session.",
   inputSchema: z.strictObject({ resource: scribeInputSchema }),
   handler: async (client, args): Promise<ToolResult> => {
-    const written = await client.proposeResource(args.resource);
-    if (!written.ok) return errorResult(written.error.code);
-    const { record, terminology } = written.data;
+    const staged = await client.proposeResource(args.resource);
+    if (!staged.ok) return errorResult(staged.error.code);
     return {
-      content: [{ type: "text", text: renderWriteText(record) }],
-      structuredContent: {
-        resourceType: record.type,
-        id: record.id,
-        versionId: record.versionId,
-        terminology
-      }
+      content: [{ type: "text", text: renderProposeText(staged.data) }],
+      structuredContent: { proposalId: staged.data.proposalId, state: staged.data.state }
     };
   }
 });
