@@ -1,0 +1,30 @@
+# Behaviour tests for no-direct-audit-insert (BF-09 acceptance #5: audit rows
+# only via the public API). Path scoping (files/ignores) does not apply to
+# inline cases — these prove the PATTERNS; the audit-module exemption and the
+# product-only scope live in the rule. VALID = the public-API call shapes and
+# unrelated SQL. INVALID = raw inserts into audit_log in template or string
+# form, however whitespaced or quoted.
+id: no-direct-audit-insert
+valid:
+  - |
+    const appended = await appendAuditRowTx(sql, receipt);
+  - |
+    const outcome = await authorizeAndAudit(sql, scope, now);
+  - |
+    await sql`insert into governance_proposal (practice_id, resource) values (x, y)`;
+  - |
+    await sql`select seq, row_hash from audit_log order by audit_log.seq desc limit 1`;
+  - |
+    const label = "audit_log is append-only";
+invalid:
+  - |
+    await sql`insert into audit_log (practice_id, seq) values (a, b)`;
+  - |
+    await sql`
+      insert into audit_log
+        (practice_id, seq, actor_id)
+      values (x, y, z)`;
+  - |
+    await sql`insert into "audit_log" (practice_id) values (p)`;
+  - |
+    await sql.unsafe("insert into audit_log (practice_id) values ($1)", [p]);

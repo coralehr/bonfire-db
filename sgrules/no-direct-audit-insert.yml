@@ -1,0 +1,55 @@
+# BF-09 acceptance #5 structural guard (ratchet candidate): every governance /
+# product decision reaches the BF-05 tamper-evident chain ONLY through the
+# audit public API (appendAuditRowTx / authorizeAndAudit). A direct
+# `insert into audit_log` outside packages/core/src/audit bypasses the
+# advisory-lock serialization, the chain-tip read, the mis-attribution guard,
+# and the row-hash preimage — producing rows the chain walk would flag (or
+# worse, a fork the UNIQUE backstops must catch at runtime). The sanctioned
+# writer lives in packages/core/src/audit/**; the loop harness is deliberately
+# NOT scoped here — its bf05 chain oracle is an INDEPENDENT implementation
+# whose whole point is to not share the product code path.
+id: no-direct-audit-insert
+language: TypeScript
+severity: error
+message: Direct `insert into audit_log` outside packages/core/src/audit — use the audit public API (appendAuditRowTx / authorizeAndAudit).
+note: |
+  The audit chain's integrity properties (per-practice advisory lock, chain-tip
+  read, mis-attribution guard, hash preimage) live in appendAuditRowTx. A raw
+  insert skips all of them. Call the audit public API instead; if you are
+  writing an independent verification oracle, it belongs in the loop harness,
+  not in product code.
+metadata:
+  slop-pattern: audit-bypass-direct-insert
+  gate-stage: 1
+files:
+  - "packages/**"
+  - "apps/**"
+  - "scripts/**"
+ignores:
+  - "packages/core/src/audit/**"
+rule:
+  any:
+    - kind: template_string
+      regex: 'insert\s+into\s+"?audit_log'
+    - kind: string
+      regex: 'insert\s+into\s+"?audit_log'
+---
+id: no-direct-audit-insert-tsx
+language: Tsx
+severity: error
+message: Direct `insert into audit_log` outside packages/core/src/audit — use the audit public API (appendAuditRowTx / authorizeAndAudit).
+metadata:
+  slop-pattern: audit-bypass-direct-insert
+  gate-stage: 1
+files:
+  - "packages/**"
+  - "apps/**"
+  - "scripts/**"
+ignores:
+  - "packages/core/src/audit/**"
+rule:
+  any:
+    - kind: template_string
+      regex: 'insert\s+into\s+"?audit_log'
+    - kind: string
+      regex: 'insert\s+into\s+"?audit_log'

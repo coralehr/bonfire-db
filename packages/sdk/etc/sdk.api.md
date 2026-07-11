@@ -9,7 +9,9 @@ import type { CcpDocument } from '@bonfire/core';
 import type { CcpError } from '@bonfire/core';
 import type { CcpInput } from '@bonfire/core';
 import { createVerifier } from '@bonfire/core';
+import type { GovernanceError } from '@bonfire/core';
 import type { Membership } from '@bonfire/core';
+import type { ProposalRecord } from '@bonfire/core';
 import { Result } from '@bonfire/core';
 import type { Role } from '@bonfire/core';
 import type { ScribeInput } from '@bonfire/core';
@@ -24,7 +26,6 @@ import type { Verifier } from '@bonfire/core';
 import type { VerifyTokenConfig } from '@bonfire/core';
 import type { WithTenantErrorCode } from '@bonfire/core';
 import type { WriteError } from '@bonfire/core';
-import type { WriteResult } from '@bonfire/core';
 import { z } from 'zod';
 
 // @public
@@ -145,7 +146,7 @@ export interface ProjectionListener {
 export type ProposeResourceInput = ScribeInput;
 
 // @public (undocumented)
-export type ProposeResourceResult = Result<WriteResult, WriteError | BonfireError<SdkErrorCode>>;
+export type ProposeResourceResult = Result<ProposalRecord, GovernanceError | WriteError | BonfireError<SdkErrorCode>>;
 
 export { Result }
 

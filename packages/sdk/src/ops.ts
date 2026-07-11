@@ -11,6 +11,8 @@ import type {
   CcpDocument,
   CcpError,
   CcpInput,
+  GovernanceError,
+  ProposalRecord,
   Result,
   ScribeInput,
   SearchErrorCode,
@@ -18,10 +20,9 @@ import type {
   SearchResponse,
   Subject,
   TenantSql,
-  WriteError,
-  WriteResult
+  WriteError
 } from "@bonfire/core";
-import { buildCcp, searchClinical, writeScribeResource } from "@bonfire/core";
+import { buildCcp, proposeRecord, searchClinical } from "@bonfire/core";
 import type { SdkErrorCode } from "./run-op.js";
 
 /** buildCcp input minus the subject (derived from the session, U2). */
@@ -30,7 +31,10 @@ export type BuildCcpResult = Result<CcpDocument, CcpError | BonfireError<SdkErro
 
 /** The typed scribe write input (BF-03); carries no subject at all. */
 export type ProposeResourceInput = ScribeInput;
-export type ProposeResourceResult = Result<WriteResult, WriteError | BonfireError<SdkErrorCode>>;
+export type ProposeResourceResult = Result<
+  ProposalRecord,
+  GovernanceError | WriteError | BonfireError<SdkErrorCode>
+>;
 
 /** searchClinical input minus the subject (derived from the session, U2). */
 export type SearchClinicalInput = Omit<SearchInput, "subject">;
@@ -47,12 +51,19 @@ export function opBuildCcp(
   return buildCcp(sql, { ...input, subject });
 }
 
+/**
+ * BF-09: propose STAGES a governance proposal — nothing reaches the canonical
+ * FHIR store until a clinician approves and commits it. The governance actor
+ * IS the session subject (id = audited actor, role/practiceId = membership
+ * row): the same U2 control as every other op, so a caller can never name its
+ * own role to the governance authority check.
+ */
 export function opProposeResource(
   sql: TenantSql,
-  _subject: Subject,
+  subject: Subject,
   input: ProposeResourceInput
-): Promise<Result<WriteResult, WriteError>> {
-  return writeScribeResource(sql, input);
+): Promise<Result<ProposalRecord, GovernanceError | WriteError>> {
+  return proposeRecord(sql, { actor: subject, resource: input });
 }
 
 export function opSearchClinical(

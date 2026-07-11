@@ -47,6 +47,7 @@
         "scripts/sql-on-fhir/**/*.ts",
         "scripts/audit-demo/**/*.ts",
         "scripts/auth-demo/**/*.ts",
+        "scripts/governance-demo/**/*.ts",
         "tests/sql-on-fhir/**/*.test.ts"
       ],
       "project": [
@@ -54,6 +55,7 @@
         "scripts/sql-on-fhir/**/*.ts",
         "scripts/audit-demo/**/*.ts",
         "scripts/auth-demo/**/*.ts",
+        "scripts/governance-demo/**/*.ts",
         "tests/sql-on-fhir/**/*.ts"
       ]
     }

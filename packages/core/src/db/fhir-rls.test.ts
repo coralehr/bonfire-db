@@ -168,8 +168,19 @@ describe("schema catalog", () => {
                has_table_privilege('bonfire_app', ${table}, 'SELECT') as sel`;
       return row;
     };
-    // Append-only: S/I, never U/D. Includes the new BF-05 audit_log.
-    for (const table of ["history", "write_inputs", "seed_completions", "audit_log"]) {
+    // Append-only: S/I, never U/D. Includes the new BF-05 audit_log and the
+    // three BF-09 governance tables (0012): event-sourced governance has no
+    // UPDATE path at the privilege layer, which is what makes a committed
+    // signed note structurally immutable rather than app-logic immutable.
+    for (const table of [
+      "history",
+      "write_inputs",
+      "seed_completions",
+      "audit_log",
+      "governance_proposal",
+      "governance_event",
+      "governance_signed_note"
+    ]) {
       expect(await priv(table)).toEqual({ upd: false, del: false, ins: true, sel: true });
     }
     // Reference data: read-only for the app (loader writes as owner). The

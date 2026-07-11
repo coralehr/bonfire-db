@@ -114,6 +114,7 @@ export async function seedConditions(
 export interface TenantFootprint {
   readonly audit: number;
   readonly fhir: number;
+  readonly governance: number;
 }
 
 /** Row counts inside ONE practice — the side-effect oracle for deny paths. */
@@ -121,7 +122,12 @@ export async function tenantFootprint(db: TenantDb, practiceId: string): Promise
   const result = await db.withTenant(practiceId, async (sql) => {
     const [auditRow] = await sql`select count(*)::int as n from audit_log`;
     const [fhirRow] = await sql`select count(*)::int as n from fhir_resources`;
-    return { audit: Number(auditRow?.n ?? -1), fhir: Number(fhirRow?.n ?? -1) };
+    const [governanceRow] = await sql`select count(*)::int as n from governance_proposal`;
+    return {
+      audit: Number(auditRow?.n ?? -1),
+      fhir: Number(fhirRow?.n ?? -1),
+      governance: Number(governanceRow?.n ?? -1)
+    };
   });
   if (!result.ok) throw new Error(`footprint read failed: ${result.error.code}`);
   return result.data;

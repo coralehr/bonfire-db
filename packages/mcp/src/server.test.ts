@@ -9,7 +9,9 @@
  */
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
-import { connectTenantDb } from "@bonfire/core";
+import type { WriteError } from "@bonfire/core";
+import { connectTenantDb, err } from "@bonfire/core";
+import type { BonfireClient } from "@bonfire/sdk";
 import type { McpFixture, TenantFixture } from "./support.test.js";
 import {
   connectMcp,
@@ -19,8 +21,10 @@ import {
   syntheticPatient,
   tenantFootprint
 } from "./support.test.js";
+import { ALLOWLIST } from "./tools.js";
 
 const TERM = "mcptrace";
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const db = connectTenantDb({ max: 4 });
 const owner = ownerSql();
 
@@ -56,7 +60,10 @@ describe("tools/list (U1: the fixed propose-only surface)", () => {
       const schema = tool.inputSchema as Record<string, unknown>;
       expect(schema.type).toBe("object");
       expect(schema.additionalProperties).toBe(false);
-      expect(/approve|commit|sql|shell|fhirpath|exec|file/i.test(tool.name)).toBe(false);
+      // NAMES only — the honest propose description legitimately says "approval".
+      expect(/approve|commit|reject|sign|sql|shell|fhirpath|exec|file/i.test(tool.name)).toBe(
+        false
+      );
     }
     const properties = new Map(
       listed.tools.map((tool) => [
@@ -169,46 +176,63 @@ describe("tool calls (U4: session-bound, tenant-scoped, sanitized)", () => {
     expect(structured.text).toBeUndefined();
   });
 
-  test("propose_resource writes NOW into the session practice (honest propose)", async () => {
+  test("propose_resource STAGES a governance proposal — the canonical store is untouched", async () => {
     const resourceId = randomUUID();
     const before = await tenantFootprint(db, tenantA.practiceId);
-    const written = await fxA.caller.callTool({
+    const staged = await fxA.caller.callTool({
       name: "propose_resource",
       arguments: { resource: syntheticPatient(resourceId) }
     });
-    expect(written.isError).toBeFalsy();
-    const structured = written.structuredContent as {
-      resourceType: string;
-      id: string;
-      versionId: string;
-    };
-    expect(structured.resourceType).toBe("Patient");
-    expect(structured.id).toBe(resourceId);
-    expect(structured.versionId).toBe("1");
+    expect(staged.isError).toBeFalsy();
+    const structured = staged.structuredContent as Record<string, unknown>;
+    expect(structured.state).toBe("proposed");
+    expect(uuidPattern.test(String(structured.proposalId))).toBe(true);
+    // NO live-record fields: the result must not look like a committed write.
+    expect(structured.versionId).toBeUndefined();
+    expect(structured.id).toBeUndefined();
+    expect(structured.resourceType).toBeUndefined();
     const after = await tenantFootprint(db, tenantA.practiceId);
-    expect(after.fhir).toBe(before.fhir + 1);
+    // Honest staging: one proposal row + its propose allow-audit row, ZERO fhir rows.
+    expect(after.fhir).toBe(before.fhir);
+    expect(after.governance).toBe(before.governance + 1);
+    expect(after.audit).toBe(before.audit + 1);
     const visible = await db.withTenant(tenantA.practiceId, (sql) => {
       return sql`select id from fhir_resources where id = ${resourceId}`;
     });
     if (!visible.ok) throw new Error(visible.error.code);
-    expect(visible.data).toHaveLength(1);
+    expect(visible.data).toHaveLength(0);
+    // The model-facing text tells the agent the truth about what happened.
+    const text = (staged.content as { text: string }[])[0]?.text ?? "";
+    expect(text).toContain('state="proposed"');
+    expect(text).toContain("clinician approval");
   });
 
   test("a forced domain error surfaces the stable code and NONE of the raw message", async () => {
-    const resourceId = randomUUID();
-    const resource = syntheticPatient(resourceId);
-    const first = await fxA.caller.callTool({ name: "propose_resource", arguments: { resource } });
-    expect(first.isError).toBeFalsy();
-    const duplicate = await fxA.caller.callTool({
-      name: "propose_resource",
-      arguments: { resource }
+    // INVALID_SCRIBE_INPUT is unreachable through the live transport (the tool
+    // schema validates the same scribeInputSchema pre-handler), so the domain
+    // error is forced through a stub session-client: the handler must emit ONLY
+    // the static table text, never the raw (zod-path-carrying) message.
+    const scribeError: WriteError = {
+      code: "INVALID_SCRIBE_INPUT",
+      message: "invalid input: expected uuid at resource.id"
+    };
+    const stubClient: BonfireClient = {
+      buildCcp: () => Promise.reject(new Error("unused")),
+      searchClinical: () => Promise.reject(new Error("unused")),
+      proposeResource: () => Promise.resolve(err(scribeError))
+    };
+    const proposeTool = ALLOWLIST.find((tool) => tool.name === "propose_resource");
+    if (proposeTool === undefined) throw new Error("propose_resource missing from ALLOWLIST");
+    const denied = await proposeTool.run(stubClient, {
+      resource: syntheticPatient(randomUUID())
     });
-    expect(duplicate.isError).toBe(true);
-    const text = (duplicate.content as { text: string }[])[0]?.text ?? "";
-    expect(text).toContain("TENANT_TX_FAILED");
-    expect(text).not.toContain("duplicate key");
-    expect(text).not.toContain("fhir_resources_pkey");
-    const structured = duplicate.structuredContent as { error: { code: string } };
-    expect(structured.error.code).toBe("TENANT_TX_FAILED");
+    expect(denied.isError).toBe(true);
+    const text = denied.content[0]?.text ?? "";
+    expect(text).toBe(
+      "bonfire-mcp error INVALID_SCRIBE_INPUT: the proposed resource failed schema validation"
+    );
+    expect(text).not.toContain("resource.id");
+    const structured = denied.structuredContent as { error: { code: string } };
+    expect(structured.error.code).toBe("INVALID_SCRIBE_INPUT");
   });
 });
