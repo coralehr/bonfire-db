@@ -143,14 +143,21 @@ async function insertEvent(
 async function loadProposal(sql: TenantSql, proposalId: string): Promise<LoadedProposal | null> {
   await sql`select pg_advisory_xact_lock(hashtext('bonfire.governance'),
     hashtext(coalesce(current_setting('app.current_practice_id', true), '')))`;
+  // FORCE RLS already scopes these reads to the bound practice; the explicit
+  // practice_id predicate is defense-in-depth (belt over the RLS suspenders)
+  // so a future RLS misconfiguration cannot widen the read to another tenant.
   const proposals = await sql`
-    select resource from governance_proposal where id = ${proposalId}`;
+    select resource from governance_proposal
+    where practice_id = (select safe_uuid(current_setting('app.current_practice_id', true)))
+      and id = ${proposalId}`;
   if (proposals.length === 0) return null;
   const proposal = proposalRowSchema.safeParse(proposals[0]);
   if (!proposal.success) throw new Error("unexpected governance_proposal row shape");
   const eventRows = await sql`
     select action, actor_id, occurred_at::text as occurred_at
-    from governance_event where proposal_id = ${proposalId}`;
+    from governance_event
+    where practice_id = (select safe_uuid(current_setting('app.current_practice_id', true)))
+      and proposal_id = ${proposalId}`;
   const events = eventRows.map((row) => {
     const parsed = eventRowSchema.safeParse(row);
     if (!parsed.success) throw new Error("unexpected governance_event row shape");
