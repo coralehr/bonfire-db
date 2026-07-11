@@ -20,7 +20,7 @@
  * RED; a GRANT of UPDATE/DELETE on governance_signed_note drops the 42501 -> RED.
  */
 import { randomUUID } from "node:crypto";
-import type { Sql } from "postgres";
+import type { Sql, TransactionSql } from "postgres";
 import {
   actorFor,
   clients,
@@ -35,11 +35,6 @@ import { fail, pass } from "./eval-util.js";
 const EVAL_ID = "bf09-committed-note-immutable";
 const INVALID = "GOVERNANCE_INVALID_TRANSITION";
 const APP_INSUFFICIENT_PRIVILEGE = "42501";
-/** The app role is GRANTed SELECT,INSERT only; each of these must be refused. */
-const NOTE_MUTATIONS = [
-  "update governance_signed_note set committer_actor_id = committer_actor_id",
-  "delete from governance_signed_note"
-] as const;
 
 const practice = randomUUID();
 const agent = actorFor(randomUUID(), "agent", practice);
@@ -60,12 +55,21 @@ async function noteSnapshot(owner: Sql, proposalId: string): Promise<string> {
   return snap;
 }
 
-/** Run a forbidden write as the RLS app role; return the SQLSTATE it raised. */
-async function forbiddenWrite(app: Sql, statement: string): Promise<string> {
+/**
+ * Run a forbidden write as the RLS app role, bound to this practice; return the
+ * SQLSTATE it raised. The mutation is a bare tagged-template literal (never
+ * sql.unsafe with statement text), so the probe itself stays within the raw-SQL
+ * ratchet — it is the app role's missing UPDATE/DELETE grant, not the query
+ * shape, that must raise 42501.
+ */
+async function forbiddenWrite(
+  app: Sql,
+  mutate: (tx: TransactionSql<Record<string, never>>) => Promise<unknown>
+): Promise<string> {
   try {
     await app.begin(async (tx) => {
       await tx`select set_config('app.current_practice_id', ${practice}, true)`;
-      await tx.unsafe(statement);
+      await mutate(tx);
     });
     return "no-error";
   } catch (error) {
@@ -127,10 +131,15 @@ try {
   }
 
   // Immutability at the privilege layer: the app role cannot UPDATE or DELETE.
-  for (const statement of NOTE_MUTATIONS) {
-    const code = await forbiddenWrite(app, statement);
+  // The app is GRANTed SELECT,INSERT only, so each of these must raise 42501.
+  const mutations: readonly [string, (tx: TransactionSql<Record<string, never>>) => Promise<unknown>][] = [
+    ["update", (tx) => tx`update governance_signed_note set committer_actor_id = committer_actor_id`],
+    ["delete", (tx) => tx`delete from governance_signed_note`]
+  ];
+  for (const [label, mutate] of mutations) {
+    const code = await forbiddenWrite(app, mutate);
     if (code !== APP_INSUFFICIENT_PRIVILEGE) {
-      fail(EVAL_ID, `app "${statement}" returned ${code}, expected ${APP_INSUFFICIENT_PRIVILEGE}`);
+      fail(EVAL_ID, `app ${label} on the note returned ${code}, expected ${APP_INSUFFICIENT_PRIVILEGE}`);
     }
   }
 
