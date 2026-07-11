@@ -30,12 +30,15 @@ export interface Step {
   readonly proposalId?: string;
 }
 
+/** Length of the synthetic MRN slice taken from a resource uuid. */
+const MRN_SLICE_LEN = 8;
+
 /** A syntactically valid scribe Patient the terminology path accepts. */
 export function draftPatient(id: string): Record<string, unknown> {
   return {
     resourceType: "Patient",
     id,
-    identifier: [{ system: "urn:bonfire:bf09-eval", value: id.slice(0, 8) }],
+    identifier: [{ system: "urn:bonfire:bf09-eval", value: id.slice(0, MRN_SLICE_LEN) }],
     name: [{ family: "Bf09Eval" }],
     gender: "female"
   };
