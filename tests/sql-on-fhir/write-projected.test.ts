@@ -6,34 +6,25 @@
  */
 import { describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
-import {
-  parseMaterializableView,
-  writeScribeResourceProjected
-} from "../../packages/sql-on-fhir/src/index.js";
+import { writeScribeResourceProjected } from "../../packages/sql-on-fhir/src/index.js";
 import type { TestContext } from "./helpers.js";
-import { registerRebuiltContext } from "./helpers.js";
+import {
+  hostilePatientNameView,
+  registerRebuiltContext,
+  syntheticPatientScribe
+} from "./helpers.js";
 
 let ctx: TestContext;
 registerRebuiltContext((c) => {
   ctx = c;
 });
 
-function patientScribe(id: string): Record<string, unknown> {
-  return {
-    resourceType: "Patient",
-    id,
-    identifier: [{ system: "https://example.org/synthetic-mrn", value: `MRN-${id.slice(0, 8)}` }],
-    name: [{ family: "Projected", given: ["Synthetic"] }],
-    gender: "female"
-  };
-}
-
 describe("one write path: canonical + projections commit together", () => {
   test("a projected scribe write lands the canonical row, vd row and spidx rows atomically", async () => {
     const practice = randomUUID();
     const id = randomUUID();
     const result = await ctx.db.withTenant(practice, async (sql) => {
-      return await writeScribeResourceProjected(sql, patientScribe(id), ctx.views);
+      return await writeScribeResourceProjected(sql, syntheticPatientScribe(id), ctx.views);
     });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -55,7 +46,7 @@ describe("one write path: canonical + projections commit together", () => {
     const practice = randomUUID();
     const id = randomUUID();
     const result = await ctx.db.withTenant(practice, async (sql) => {
-      return await writeScribeResourceProjected(sql, patientScribe(id));
+      return await writeScribeResourceProjected(sql, syntheticPatientScribe(id));
     });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -81,29 +72,15 @@ describe("one write path: canonical + projections commit together", () => {
     // (VD_COLUMN_MULTIPLE_VALUES) for a patient with two names — the
     // projection err surfaces after insertFhirResourceTx has run, so the
     // composed function must THROW and withTenant must roll everything back.
-    const hostile = parseMaterializableView({
-      name: "patient_hostile_probe",
-      resource: "Patient",
-      status: "active",
-      select: [
-        {
-          column: [
-            { name: "id", path: "getResourceKey()", type: "id" },
-            { name: "family_name", path: "name.family", type: "string" }
-          ]
-        }
-      ]
-    });
-    expect(hostile.ok).toBe(true);
-    if (!hostile.ok) return;
+    const hostile = hostilePatientNameView("patient_hostile_probe");
     const practice = randomUUID();
     const id = randomUUID();
     const twoNames = {
-      ...patientScribe(id),
+      ...syntheticPatientScribe(id),
       name: [{ family: "First" }, { family: "Second" }]
     };
     const result = await ctx.db.withTenant(practice, async (sql) => {
-      return await writeScribeResourceProjected(sql, twoNames, [hostile.data]);
+      return await writeScribeResourceProjected(sql, twoNames, [hostile]);
     });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.code).toBe("TENANT_TX_FAILED");
