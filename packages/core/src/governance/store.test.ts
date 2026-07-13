@@ -13,13 +13,22 @@ import { randomUUID } from "node:crypto";
 import { createSqlClient } from "../db/client.js";
 import { resolveDatabaseTarget } from "../db/env.js";
 import { createTenantDb } from "../db/tenant.js";
-import type { GovernanceActor, GovernanceRole, Result, TenantSql } from "../index.js";
+import type {
+  GovernanceActor,
+  GovernanceError,
+  GovernanceRole,
+  Result,
+  SignedNote,
+  TenantSql,
+  WriteError
+} from "../index.js";
 import {
   approveProposal,
-  commitProposal,
+  commitProposal as commitProposalWithWriter,
   proposeRecord,
   signedNoteSchema,
-  verifyAuditChainTx
+  verifyAuditChainTx,
+  writeScribeResource
 } from "../index.js";
 
 const db = createTenantDb(createSqlClient(resolveDatabaseTarget(), { max: 5 }));
@@ -27,6 +36,15 @@ const db = createTenantDb(createSqlClient(resolveDatabaseTarget(), { max: 5 }));
 afterAll(async () => {
   await db.end();
 });
+
+/** Core governance tests inject the canonical primitive; composition with every
+ * read model is exercised at the public sql-on-fhir boundary. */
+function commitProposal(
+  sql: TenantSql,
+  input: { readonly actor: unknown; readonly proposalId: string }
+): Promise<Result<SignedNote, GovernanceError | WriteError>> {
+  return commitProposalWithWriter(sql, input, writeScribeResource);
+}
 
 /** Unwrap the OUTER withTenant Result: deny paths COMMIT (outer ok); only DB faults roll back. */
 async function committed<T>(practice: string, fn: (sql: TenantSql) => Promise<T>): Promise<T> {

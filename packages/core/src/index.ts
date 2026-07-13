@@ -91,6 +91,7 @@ export { decimalDiffs, structuralDiffs } from "./fhir/roundtrip-diff.js";
 export type { ScribeInput, ScribeResourceType } from "./fhir/scribe-schemas.js";
 export { scribeInputSchema } from "./fhir/scribe-schemas.js";
 export { decideGovernance, transition } from "./governance/policy.js";
+export type { GovernanceCommitWriter } from "./governance/store.js";
 export { approveProposal, commitProposal, proposeRecord } from "./governance/store.js";
 export type {
   GovernanceAction,

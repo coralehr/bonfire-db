@@ -22,12 +22,8 @@
  */
 import { z } from "zod";
 import type { Result, TenantSql } from "../../packages/core/src/index.js";
-import {
-  approveProposal,
-  commitProposal,
-  connectTenantDb,
-  proposeRecord
-} from "../../packages/core/src/index.js";
+import { approveProposal, connectTenantDb, proposeRecord } from "../../packages/core/src/index.js";
+import { commitProjectedProposal } from "../../packages/sql-on-fhir/src/index.js";
 
 const stepSchema = z.object({
   op: z.enum(["propose", "approve", "commit"]),
@@ -69,7 +65,10 @@ function runStep(
     case "approve":
       return approveProposal(sql, { actor: step.actor, proposalId: step.proposalId ?? "" });
     case "commit":
-      return commitProposal(sql, { actor: step.actor, proposalId: step.proposalId ?? "" });
+      return commitProjectedProposal(sql, {
+        actor: step.actor,
+        proposalId: step.proposalId ?? ""
+      });
   }
 }
 

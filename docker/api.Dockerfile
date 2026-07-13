@@ -3,8 +3,8 @@
 # Stage 1 resolves the workspace with manifests only (layer-cacheable): EVERY
 # workspace manifest listed in the root package.json "workspaces" must be
 # present or `bun install --frozen-lockfile` fails with "Workspace not found".
-# loop/, seed/ and packages/sql-on-fhir/ are copied for resolution only, their
-# source never ships.
+# loop/ and seed/ are copied for resolution only. Core and sql-on-fhir ship
+# because the API composes governed commits through the projected write path.
 # (Guarded by docker-invariants.test.ts against a forgotten new-workspace COPY.)
 FROM oven/bun:1.3.14-slim AS deps
 WORKDIR /app
@@ -35,6 +35,9 @@ COPY --from=deps /app/loop/package.json loop/package.json
 COPY --from=deps /app/seed/package.json seed/package.json
 COPY packages/core/tsconfig.json packages/core/tsconfig.json
 COPY packages/core/src packages/core/src
+COPY packages/sql-on-fhir/tsconfig.json packages/sql-on-fhir/tsconfig.json
+COPY packages/sql-on-fhir/src packages/sql-on-fhir/src
+COPY packages/sql-on-fhir/viewdefinitions packages/sql-on-fhir/viewdefinitions
 COPY apps/api/tsconfig.json apps/api/tsconfig.json
 COPY apps/api/src apps/api/src
 USER bun

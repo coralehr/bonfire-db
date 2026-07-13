@@ -9,7 +9,14 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
 import type { Role, TenantDb, Verifier } from "@bonfire/core";
-import { connectTenantDb, createVerifier, devDatabaseUrl, signedNoteSchema } from "@bonfire/core";
+import {
+  commitProposal,
+  connectTenantDb,
+  createVerifier,
+  devDatabaseUrl,
+  signedNoteSchema,
+  writeScribeResource
+} from "@bonfire/core";
 import type { FastifyInstance } from "fastify";
 import fastify from "fastify";
 import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT } from "jose";
@@ -60,7 +67,11 @@ beforeAll(async () => {
   tenantDb = connectTenantDb({ max: 2 });
   owner = postgres(devDatabaseUrl("migrate"), { max: 1 });
   app = fastify();
-  await app.register(governanceRoutes({ verifier, tenantDb }));
+  await app.register(
+    governanceRoutes({ verifier, tenantDb }, (sql, input) =>
+      commitProposal(sql, input, writeScribeResource)
+    )
+  );
   await app.ready();
 });
 

@@ -28,6 +28,7 @@ export type {
   ViewError,
   ViewErrorCode
 } from "./errors.js";
+export { commitProjectedProposal } from "./governance.js";
 export type { PlannedColumn, TablePlan } from "./materialize/ddl.js";
 export { planTable } from "./materialize/ddl.js";
 export type { RebuildSummary } from "./materialize/rebuild.js";
@@ -51,5 +52,9 @@ export {
   RESERVED_COLUMN_NAMES,
   viewDefinitionSchema
 } from "./view-definition.js";
-export type { ProjectedWriteError, ProjectedWriteResult } from "./write-projected.js";
+export type {
+  ProjectedWriteError,
+  ProjectedWriteResult,
+  SearchProjector
+} from "./write-projected.js";
 export { writeScribeResourceProjected } from "./write-projected.js";

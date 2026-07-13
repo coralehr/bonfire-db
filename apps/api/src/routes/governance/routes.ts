@@ -10,7 +10,7 @@
  * off the request body, params, headers, or token claims. Every route replies
  * 200 with the typed governance Result as the body — the body's stable error
  * codes (GOVERNANCE_FORBIDDEN / GOVERNANCE_INVALID_TRANSITION /
- * GOVERNANCE_NOT_FOUND / INVALID_SCRIBE_INPUT) are the oracle, while
+ * GOVERNANCE_NOT_FOUND / typed write errors) are the oracle, while
  * runAuthenticated owns the transport-level 401/403/500 denials.
  */
 import type {
@@ -22,7 +22,9 @@ import type {
   TenantSql,
   WriteError
 } from "@bonfire/core";
-import { approveProposal, commitProposal, proposeRecord } from "@bonfire/core";
+import { approveProposal, proposeRecord } from "@bonfire/core";
+import type { ProjectedWriteError } from "@bonfire/sql-on-fhir";
+import { commitProjectedProposal } from "@bonfire/sql-on-fhir";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import type { AuthDeps } from "../../middleware/auth-hook.js";
@@ -34,13 +36,21 @@ const paramsSchema = z.object({ id: z.uuid() });
 /** The staged resource travels under one explicit key; extra keys are inert. */
 const proposeBodySchema = z.looseObject({ resource: z.unknown() });
 
-type GovernanceOutcome = Result<ProposalRecord | SignedNote, GovernanceError | WriteError>;
+type GovernanceOutcome = Result<
+  ProposalRecord | SignedNote,
+  GovernanceError | WriteError | ProjectedWriteError
+>;
 
 /** One store call, bound to the authenticated actor + tenant-scoped sql. */
 type GovernanceCall = (
   sql: TenantSql,
   actor: GovernanceActor,
   request: FastifyRequest
+) => Promise<GovernanceOutcome>;
+
+type GovernanceCommit = (
+  sql: TenantSql,
+  input: { readonly actor: unknown; readonly proposalId: string }
 ) => Promise<GovernanceOutcome>;
 
 type RouteHandler = (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
@@ -86,7 +96,10 @@ function governanceHandler(deps: AuthDeps, call: GovernanceCall): RouteHandler {
 }
 
 /** Fastify plugin factory over injected deps (BF-13 pattern; app wiring stays deferred). */
-export function governanceRoutes(deps: AuthDeps): (app: FastifyInstance) => Promise<void> {
+export function governanceRoutes(
+  deps: AuthDeps,
+  commit: GovernanceCommit = commitProjectedProposal
+): (app: FastifyInstance) => Promise<void> {
   return (app: FastifyInstance): Promise<void> => {
     app.post(
       "/governance/proposals",
@@ -103,7 +116,7 @@ export function governanceRoutes(deps: AuthDeps): (app: FastifyInstance) => Prom
     app.post(
       "/governance/proposals/:id/commit",
       governanceHandler(deps, (sql, actor, request) =>
-        commitProposal(sql, { actor, proposalId: proposalIdOf(request.params) })
+        commit(sql, { actor, proposalId: proposalIdOf(request.params) })
       )
     );
     return Promise.resolve();
