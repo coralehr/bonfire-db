@@ -18,7 +18,6 @@ import {
   type ResourceKey
 } from "./walk-types.js";
 
-export { REFERENCE_TRAVERSAL_LIMITS } from "./walk-types.js";
 export type {
   ReferenceEdge,
   ReferenceEdgePage,
@@ -32,6 +31,7 @@ export type {
   ReferenceTraversalResult,
   ResourceKey
 } from "./walk-types.js";
+export { REFERENCE_TRAVERSAL_LIMITS } from "./walk-types.js";
 
 function edgeKey(edge: ReferenceEdge): string {
   return [
@@ -55,22 +55,18 @@ async function boundedEdges(
   state.stats.edgeReadTruncated ||= page.truncated || page.edges.length > remaining;
   state.stats.consideredEdges += readEdges.length;
   const eligible = [...readEdges]
-    .filter(
-      (edge) => {
-        const source = frontier.get(
-          `${edge.sourceResourceType}/${edge.sourceResourceId}`
-        );
-        if (source === undefined) return false;
-        if (edge.sourceVersionId !== source.versionId) {
-          state.stats.staleSourceEdges += 1;
-          return false;
-        }
-        return (
-          state.allowedTypes.has(edge.targetResourceType) &&
-          isAllowedReferenceEdge(state.options.profile, edge)
-        );
+    .filter((edge) => {
+      const source = frontier.get(`${edge.sourceResourceType}/${edge.sourceResourceId}`);
+      if (source === undefined) return false;
+      if (edge.sourceVersionId !== source.versionId) {
+        state.stats.staleSourceEdges += 1;
+        return false;
       }
-    )
+      return (
+        state.allowedTypes.has(edge.targetResourceType) &&
+        isAllowedReferenceEdge(state.options.profile, edge)
+      );
+    })
     .sort((left, right) => edgeKey(left).localeCompare(edgeKey(right)));
   state.stats.edgesOmitted += page.truncated || page.edges.length > remaining ? 1 : 0;
   return [frontier, eligible];
@@ -122,18 +118,17 @@ function targetRequests(
 ): ReferenceTargetRequest[] {
   const unique = new Map(
     pending
-    .filter((item) => (item.requestedVersionId !== null) === historical)
-    .map((item) => {
-      const request = { ...item.key, versionId: item.requestedVersionId };
-      return [requestKey(request), request] as const;
-    })
+      .filter((item) => (item.requestedVersionId !== null) === historical)
+      .map((item) => {
+        const request = { ...item.key, versionId: item.requestedVersionId };
+        return [requestKey(request), request] as const;
+      })
   );
-  return [...unique.values()]
-    .sort((left, right) =>
-      `${keyOf(left)}/${left.versionId ?? ""}`.localeCompare(
-        `${keyOf(right)}/${right.versionId ?? ""}`
-      )
-    );
+  return [...unique.values()].sort((left, right) =>
+    `${keyOf(left)}/${left.versionId ?? ""}`.localeCompare(
+      `${keyOf(right)}/${right.versionId ?? ""}`
+    )
+  );
 }
 
 function acceptResolvedTarget(
@@ -210,10 +205,7 @@ async function resolvePending(
   state.frontier = nextFrontier;
 }
 
-async function resolveRoots(
-  state: TraversalState,
-  reader: ReferenceGraphReader
-): Promise<void> {
+async function resolveRoots(state: TraversalState, reader: ReferenceGraphReader): Promise<void> {
   const requests = state.roots.map((root) => ({ ...root, versionId: null }));
   const resolved = await reader.resolveTargets(requests);
   const byKey = new Map(resolved.map((target) => [keyOf(target), target]));
@@ -234,11 +226,7 @@ export async function walkReferenceGraph(
 ): Promise<ReferenceTraversalResult> {
   const state = initializeState(rawRoots, rawOptions);
   await resolveRoots(state, reader);
-  for (
-    let depth = 1;
-    depth <= state.options.maxDepth && state.frontier.length > 0;
-    depth += 1
-  ) {
+  for (let depth = 1; depth <= state.options.maxDepth && state.frontier.length > 0; depth += 1) {
     state.stats.maxDepthReached = depth;
     const [frontier, edges] = await boundedEdges(state, reader);
     await resolvePending(state, reader, collectPending(state, frontier, edges, depth), depth);

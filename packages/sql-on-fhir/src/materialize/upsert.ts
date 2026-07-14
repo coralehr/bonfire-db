@@ -7,7 +7,7 @@
  * `withTenant` rolls the whole transaction back (no partial write).
  */
 import type { JsonObject, Result, TenantSql } from "@bonfire/core";
-import { err, jsonValueSchema, ok } from "@bonfire/core";
+import { err, fhirContentSchema, ok } from "@bonfire/core";
 import { z } from "zod";
 import { evaluateView } from "../engine/evaluate.js";
 import type { Row } from "../engine/selection.js";
@@ -24,7 +24,7 @@ const currentRowSchema = z.object({
   type: z.string().min(1),
   version_id: z.string().min(1),
   last_updated: z.string().min(1),
-  content: z.record(z.string(), jsonValueSchema)
+  content: fhirContentSchema
 });
 
 export interface UpsertSummary {

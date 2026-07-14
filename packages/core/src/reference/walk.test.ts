@@ -4,7 +4,8 @@ import type {
   ReferenceEdgePage,
   ReferenceGraphReader,
   ReferenceTarget,
-  ReferenceTargetRequest
+  ReferenceTargetRequest,
+  ReferenceTraversalOptions
 } from "./walk.js";
 import { walkReferenceGraph } from "./walk.js";
 
@@ -34,34 +35,46 @@ function edge(
   };
 }
 
+function target(
+  resourceType: string,
+  resourceId: string,
+  versionId: string = "1"
+): ReferenceTarget {
+  return {
+    resourceType,
+    resourceId,
+    versionId,
+    lastUpdated: "2026-07-13T00:00:00.000Z",
+    content: { resourceType, id: resourceId }
+  };
+}
+
 class MemoryReader implements ReferenceGraphReader {
   constructor(
     readonly edges: readonly ReferenceEdge[],
     readonly targets: readonly ReferenceTarget[]
   ) {}
 
-  async readEdges(
-    sourceKeys: readonly string[],
-    maxRows: number
-  ): Promise<ReferenceEdgePage> {
+  async readEdges(sourceKeys: readonly string[], maxRows: number): Promise<ReferenceEdgePage> {
     const matches = this.edges.filter((item) =>
       sourceKeys.includes(`${item.sourceResourceType}/${item.sourceResourceId}`)
     );
     return { edges: matches.slice(0, maxRows), truncated: matches.length > maxRows };
   }
 
-  async resolveTargets(requests: readonly ReferenceTargetRequest[]): Promise<readonly ReferenceTarget[]> {
+  async resolveTargets(
+    requests: readonly ReferenceTargetRequest[]
+  ): Promise<readonly ReferenceTarget[]> {
     const resolved: ReferenceTarget[] = [];
     for (const request of requests) {
       const candidates = this.targets.filter(
         (item) =>
-          request.resourceType === item.resourceType &&
-          request.resourceId === item.resourceId
+          request.resourceType === item.resourceType && request.resourceId === item.resourceId
       );
       const match =
         request.versionId === null
-          ? [...candidates].sort((left, right) =>
-              Number(right.versionId) - Number(left.versionId)
+          ? [...candidates].sort(
+              (left, right) => Number(right.versionId) - Number(left.versionId)
             )[0]
           : candidates.find((item) => item.versionId === request.versionId);
       if (match !== undefined) resolved.push(match);
@@ -70,24 +83,23 @@ class MemoryReader implements ReferenceGraphReader {
   }
 }
 
+function walkReport(
+  reader: ReferenceGraphReader,
+  options: ReferenceTraversalOptions
+): Promise<Awaited<ReturnType<typeof walkReferenceGraph>>> {
+  return walkReferenceGraph(
+    [{ resourceType: "DiagnosticReport", resourceId: ids.report }],
+    reader,
+    options
+  );
+}
+
 describe("bounded reference graph walk", () => {
   test("returns deterministic path citations, missing targets, and depth-2 evidence", async () => {
     const reader = new MemoryReader(
       [
-        edge(
-          "DiagnosticReport",
-          ids.report,
-          "/result/0/reference",
-          "Observation",
-          ids.observation
-        ),
-        edge(
-          "DiagnosticReport",
-          ids.report,
-          "/specimen/0/reference",
-          "Specimen",
-          ids.missing
-        ),
+        edge("DiagnosticReport", ids.report, "/result/0/reference", "Observation", ids.observation),
+        edge("DiagnosticReport", ids.report, "/specimen/0/reference", "Specimen", ids.missing),
         {
           ...edge(
             "Observation",
@@ -98,56 +110,25 @@ describe("bounded reference graph walk", () => {
           ),
           sourceVersionId: "3"
         },
-        edge(
-          "Observation",
-          ids.child,
-          "/hasMember/0/reference",
-          "Observation",
-          ids.observation
-        )
+        edge("Observation", ids.child, "/hasMember/0/reference", "Observation", ids.observation)
       ],
       [
-        {
-          resourceType: "DiagnosticReport",
-          resourceId: ids.report,
-          versionId: "1",
-          lastUpdated: "2026-07-13T00:00:00.000Z",
-          content: { resourceType: "DiagnosticReport", id: ids.report }
-        },
-        {
-          resourceType: "Observation",
-          resourceId: ids.observation,
-          versionId: "3",
-          lastUpdated: "2026-07-13T00:00:00.000Z",
-          content: { resourceType: "Observation", id: ids.observation }
-        },
-        {
-          resourceType: "Observation",
-          resourceId: ids.child,
-          versionId: "2",
-          lastUpdated: "2026-07-13T00:00:00.000Z",
-          content: { resourceType: "Observation", id: ids.child }
-        }
+        target("DiagnosticReport", ids.report),
+        target("Observation", ids.observation, "3"),
+        target("Observation", ids.child, "2")
       ]
     );
 
-    const result = await walkReferenceGraph(
-      [{ resourceType: "DiagnosticReport", resourceId: ids.report }],
-      reader,
-      {
-        profile: "micro-evidence-v1",
-        allowedResourceTypes: ["DiagnosticReport", "Observation", "Specimen"],
-        maxDepth: 2,
-        maxTargets: 8,
-        maxEdges: 12,
-        maxCitations: 12
-      }
-    );
+    const result = await walkReport(reader, {
+      profile: "micro-evidence-v1",
+      allowedResourceTypes: ["DiagnosticReport", "Observation", "Specimen"],
+      maxDepth: 2,
+      maxTargets: 8,
+      maxEdges: 12,
+      maxCitations: 12
+    });
 
-    expect(result.targets.map((target) => target.resourceId)).toEqual([
-      ids.observation,
-      ids.child
-    ]);
+    expect(result.targets.map((target) => target.resourceId)).toEqual([ids.observation, ids.child]);
     expect(result.stats).toEqual({
       consideredEdges: 3,
       fetchedTargets: 2,
@@ -177,58 +158,24 @@ describe("bounded reference graph walk", () => {
   test("enforces target and citation bounds without changing traversal order", async () => {
     const reader = new MemoryReader(
       [
-        edge(
-          "DiagnosticReport",
-          ids.report,
-          "/result/0/reference",
-          "Observation",
-          ids.observation
-        ),
-        edge(
-          "DiagnosticReport",
-          ids.report,
-          "/specimen/0/reference",
-          "Specimen",
-          ids.specimen
-        )
+        edge("DiagnosticReport", ids.report, "/result/0/reference", "Observation", ids.observation),
+        edge("DiagnosticReport", ids.report, "/specimen/0/reference", "Specimen", ids.specimen)
       ],
       [
-        {
-          resourceType: "DiagnosticReport",
-          resourceId: ids.report,
-          versionId: "1",
-          lastUpdated: "2026-07-13T00:00:00.000Z",
-          content: { resourceType: "DiagnosticReport", id: ids.report }
-        },
-        {
-          resourceType: "Observation",
-          resourceId: ids.observation,
-          versionId: "1",
-          lastUpdated: "2026-07-13T00:00:00.000Z",
-          content: { resourceType: "Observation", id: ids.observation }
-        },
-        {
-          resourceType: "Specimen",
-          resourceId: ids.specimen,
-          versionId: "1",
-          lastUpdated: "2026-07-13T00:00:00.000Z",
-          content: { resourceType: "Specimen", id: ids.specimen }
-        }
+        target("DiagnosticReport", ids.report),
+        target("Observation", ids.observation),
+        target("Specimen", ids.specimen)
       ]
     );
 
-    const result = await walkReferenceGraph(
-      [{ resourceType: "DiagnosticReport", resourceId: ids.report }],
-      reader,
-      {
-        profile: "micro-evidence-v1",
-        allowedResourceTypes: ["DiagnosticReport", "Observation", "Specimen"],
-        maxDepth: 1,
-        maxTargets: 1,
-        maxEdges: 2,
-        maxCitations: 1
-      }
-    );
+    const result = await walkReport(reader, {
+      profile: "micro-evidence-v1",
+      allowedResourceTypes: ["DiagnosticReport", "Observation", "Specimen"],
+      maxDepth: 1,
+      maxTargets: 1,
+      maxEdges: 2,
+      maxCitations: 1
+    });
 
     expect(result.targets).toHaveLength(0);
     expect(result.citations).toHaveLength(1);
@@ -241,51 +188,20 @@ describe("bounded reference graph walk", () => {
   test("omits evidence rather than returning a target without a fetched citation", async () => {
     const reader = new MemoryReader(
       [
-        edge(
-          "DiagnosticReport",
-          ids.report,
-          "/result/0/reference",
-          "Observation",
-          ids.missing
-        ),
-        edge(
-          "DiagnosticReport",
-          ids.report,
-          "/specimen/0/reference",
-          "Specimen",
-          ids.specimen
-        )
+        edge("DiagnosticReport", ids.report, "/result/0/reference", "Observation", ids.missing),
+        edge("DiagnosticReport", ids.report, "/specimen/0/reference", "Specimen", ids.specimen)
       ],
-      [
-        {
-          resourceType: "DiagnosticReport",
-          resourceId: ids.report,
-          versionId: "1",
-          lastUpdated: "2026-07-13T00:00:00.000Z",
-          content: { resourceType: "DiagnosticReport", id: ids.report }
-        },
-        {
-          resourceType: "Specimen",
-          resourceId: ids.specimen,
-          versionId: "1",
-          lastUpdated: "2026-07-13T00:00:00.000Z",
-          content: { resourceType: "Specimen", id: ids.specimen }
-        }
-      ]
+      [target("DiagnosticReport", ids.report), target("Specimen", ids.specimen)]
     );
 
-    const result = await walkReferenceGraph(
-      [{ resourceType: "DiagnosticReport", resourceId: ids.report }],
-      reader,
-      {
-        profile: "micro-evidence-v1",
-        allowedResourceTypes: ["Observation", "Specimen"],
-        maxDepth: 1,
-        maxTargets: 4,
-        maxEdges: 4,
-        maxCitations: 1
-      }
-    );
+    const result = await walkReport(reader, {
+      profile: "micro-evidence-v1",
+      allowedResourceTypes: ["Observation", "Specimen"],
+      maxDepth: 1,
+      maxTargets: 4,
+      maxEdges: 4,
+      maxCitations: 1
+    });
 
     expect(result.citations.map((citation) => citation.status)).toEqual(["missing"]);
     expect(result.targets).toEqual([]);
@@ -294,61 +210,30 @@ describe("bounded reference graph walk", () => {
 
   test("fails closed on stale source edges and does not conflate missing duplicates", async () => {
     const stale = {
-      ...edge(
-        "DiagnosticReport",
-        ids.report,
-        "/result/2/reference",
-        "Observation",
-        ids.child
-      ),
+      ...edge("DiagnosticReport", ids.report, "/result/2/reference", "Observation", ids.child),
       sourceVersionId: "1"
     };
     const missingA = {
-      ...edge(
-        "DiagnosticReport",
-        ids.report,
-        "/result/0/reference",
-        "Observation",
-        ids.missing
-      ),
+      ...edge("DiagnosticReport", ids.report, "/result/0/reference", "Observation", ids.missing),
       sourceVersionId: "2"
     };
     const missingB = { ...missingA, jsonPath: "/result/1/reference" };
-    const reader = new MemoryReader([stale, missingA, missingB], [
-      {
-        resourceType: "DiagnosticReport",
-        resourceId: ids.report,
-        versionId: "2",
-        lastUpdated: "2026-07-13T00:00:00.000Z",
-        content: { resourceType: "DiagnosticReport", id: ids.report }
-      },
-      {
-        resourceType: "Observation",
-        resourceId: ids.child,
-        versionId: "1",
-        lastUpdated: "2026-07-13T00:00:00.000Z",
-        content: { resourceType: "Observation", id: ids.child }
-      }
-    ]);
-
-    const result = await walkReferenceGraph(
-      [{ resourceType: "DiagnosticReport", resourceId: ids.report }],
-      reader,
-      {
-        profile: "clinical-reference-v1",
-        allowedResourceTypes: ["Observation"],
-        maxDepth: 1,
-        maxTargets: 4,
-        maxEdges: 4,
-        maxCitations: 4
-      }
+    const reader = new MemoryReader(
+      [stale, missingA, missingB],
+      [target("DiagnosticReport", ids.report, "2"), target("Observation", ids.child)]
     );
 
+    const result = await walkReport(reader, {
+      profile: "clinical-reference-v1",
+      allowedResourceTypes: ["Observation"],
+      maxDepth: 1,
+      maxTargets: 4,
+      maxEdges: 4,
+      maxCitations: 4
+    });
+
     expect(result.targets).toEqual([]);
-    expect(result.citations.map((citation) => citation.status)).toEqual([
-      "missing",
-      "missing"
-    ]);
+    expect(result.citations.map((citation) => citation.status)).toEqual(["missing", "missing"]);
     expect(result.stats.staleSourceEdges).toBe(1);
   });
 
@@ -371,23 +256,10 @@ describe("bounded reference graph walk", () => {
       targetVersionId: "2"
     };
     const targets: ReferenceTarget[] = [
-      {
-        resourceType: "DiagnosticReport",
-        resourceId: ids.report,
-        versionId: "1",
-        lastUpdated: "2026-07-13T00:00:00.000Z",
-        content: { resourceType: "DiagnosticReport", id: ids.report }
-      },
-      ...["1", "2", "3"].map((versionId) => ({
-        resourceType: "Observation",
-        resourceId: ids.observation,
-        versionId,
-        lastUpdated: "2026-07-13T00:00:00.000Z",
-        content: { resourceType: "Observation", id: ids.observation }
-      }))
+      target("DiagnosticReport", ids.report),
+      ...["1", "2", "3"].map((versionId) => target("Observation", ids.observation, versionId))
     ];
-    const result = await walkReferenceGraph(
-      [{ resourceType: "DiagnosticReport", resourceId: ids.report }],
+    const result = await walkReport(
       new MemoryReader([current, historicalOne, historicalTwo], targets),
       {
         profile: "micro-evidence-v1",
@@ -411,20 +283,8 @@ describe("bounded reference graph walk", () => {
   test("charges filtered rows against the global storage-read edge bound", async () => {
     const reader = new MemoryReader(
       [
-        edge(
-          "DiagnosticReport",
-          ids.report,
-          "/result/0/reference",
-          "Observation",
-          ids.observation
-        ),
-        edge(
-          "DiagnosticReport",
-          ids.report,
-          "/subject/reference",
-          "Patient",
-          ids.missing
-        ),
+        edge("DiagnosticReport", ids.report, "/result/0/reference", "Observation", ids.observation),
+        edge("DiagnosticReport", ids.report, "/subject/reference", "Patient", ids.missing),
         {
           ...edge(
             "Observation",
@@ -437,42 +297,20 @@ describe("bounded reference graph walk", () => {
         }
       ],
       [
-        {
-          resourceType: "DiagnosticReport",
-          resourceId: ids.report,
-          versionId: "1",
-          lastUpdated: "2026-07-13T00:00:00.000Z",
-          content: { resourceType: "DiagnosticReport", id: ids.report }
-        },
-        {
-          resourceType: "Observation",
-          resourceId: ids.observation,
-          versionId: "3",
-          lastUpdated: "2026-07-13T00:00:00.000Z",
-          content: { resourceType: "Observation", id: ids.observation }
-        },
-        {
-          resourceType: "Observation",
-          resourceId: ids.child,
-          versionId: "1",
-          lastUpdated: "2026-07-13T00:00:00.000Z",
-          content: { resourceType: "Observation", id: ids.child }
-        }
+        target("DiagnosticReport", ids.report),
+        target("Observation", ids.observation, "3"),
+        target("Observation", ids.child)
       ]
     );
 
-    const result = await walkReferenceGraph(
-      [{ resourceType: "DiagnosticReport", resourceId: ids.report }],
-      reader,
-      {
-        profile: "micro-evidence-v1",
-        allowedResourceTypes: ["Observation", "Patient"],
-        maxDepth: 2,
-        maxTargets: 4,
-        maxEdges: 2,
-        maxCitations: 4
-      }
-    );
+    const result = await walkReport(reader, {
+      profile: "micro-evidence-v1",
+      allowedResourceTypes: ["Observation", "Patient"],
+      maxDepth: 2,
+      maxTargets: 4,
+      maxEdges: 2,
+      maxCitations: 4
+    });
 
     expect(result.stats.consideredEdges).toBe(2);
     expect(result.stats.maxDepthReached).toBe(1);

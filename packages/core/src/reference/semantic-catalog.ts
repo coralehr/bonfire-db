@@ -43,7 +43,12 @@ const CLINICAL_RULES = [
   rule("Encounter", "reasonReference", /^\/reasonReference\/\d+\/reference$/, "Condition"),
   rule("Encounter", "subject", /^\/subject\/reference$/, "Patient"),
   rule("MedicationRequest", "encounter", /^\/encounter\/reference$/, "Encounter"),
-  rule("MedicationRequest", "medicationReference", /^\/medicationReference\/reference$/, "Medication"),
+  rule(
+    "MedicationRequest",
+    "medicationReference",
+    /^\/medicationReference\/reference$/,
+    "Medication"
+  ),
   rule("MedicationRequest", "reasonReference", /^\/reasonReference\/\d+\/reference$/, "Condition"),
   rule("MedicationRequest", "subject", /^\/subject\/reference$/, "Patient"),
   rule("Observation", "encounter", /^\/encounter\/reference$/, "Encounter"),

@@ -6,11 +6,11 @@
 import { z } from "zod";
 import type { JsonObject } from "../db/canonical-json.js";
 import { canonicalizeJson, sha256Hex } from "../db/canonical-json.js";
-import { jsonValueSchema } from "../db/fhir-store.js";
+import { fhirContentSchema } from "../db/fhir-store.js";
 import type { TenantSql } from "../db/tenant.js";
 import type { BonfireError, Result } from "../result.js";
 import { err, ok } from "../result.js";
-import { extractExplicitReferences, type ExplicitReference } from "./extract.js";
+import { type ExplicitReference, extractExplicitReferences } from "./extract.js";
 
 export type ReferenceProjectionErrorCode =
   | "REFERENCE_INVALID_INPUT"
@@ -40,7 +40,7 @@ const resourceIdSchema = z.uuid();
 const canonicalRowSchema = z.object({
   type: z.string().min(1),
   version_id: z.string().regex(/^[0-9]+$/),
-  content: z.record(z.string(), jsonValueSchema)
+  content: fhirContentSchema
 });
 const storedEdgeSchema = z.object({
   source_resource_type: z.string().min(1),
@@ -57,6 +57,7 @@ const projectionHeadSchema = z.object({
   edge_count: z.number().int().nonnegative(),
   projection_digest: z.string().regex(/^[0-9a-f]{64}$/)
 });
+type CanonicalSource = z.infer<typeof canonicalRowSchema> & { readonly resourceId: string };
 
 function digestProjection(
   sourceResourceType: string,
@@ -76,10 +77,14 @@ function digestProjection(
 async function fetchCanonical(
   sql: TenantSql,
   resourceId: string
-): Promise<Result<z.infer<typeof canonicalRowSchema>, ReferenceProjectionError>> {
+): Promise<Result<CanonicalSource, ReferenceProjectionError>> {
+  const parsedId = resourceIdSchema.safeParse(resourceId);
+  if (!parsedId.success) {
+    return err({ code: "REFERENCE_INVALID_INPUT", message: "resourceId must be a UUID" });
+  }
   const rows = await sql`
     select type, version_id::text as version_id, content
-    from fhir_resources where id = ${resourceId}`;
+    from fhir_resources where id = ${parsedId.data}`;
   const parsed = canonicalRowSchema.safeParse(rows[0]);
   if (!parsed.success) {
     return err({
@@ -87,13 +92,16 @@ async function fetchCanonical(
       message: "resource is not visible in this tenant transaction"
     });
   }
-  if (parsed.data.content.id !== resourceId || parsed.data.content.resourceType !== parsed.data.type) {
+  if (
+    parsed.data.content.id !== parsedId.data ||
+    parsed.data.content.resourceType !== parsed.data.type
+  ) {
     return err({
       code: "REFERENCE_KEY_MISMATCH",
       message: "canonical content identity does not match the fhir_resources row"
     });
   }
-  return ok(parsed.data);
+  return ok({ resourceId: parsedId.data, ...parsed.data });
 }
 
 interface StoredProjection {
@@ -136,33 +144,68 @@ async function readStoredProjection(
   return { edges, metadataMatches, head: parsedHead.success ? parsedHead.data : null };
 }
 
+function projectionHeadMatches(
+  source: CanonicalSource,
+  stored: StoredProjection,
+  storedDigest: string
+): boolean {
+  const head = stored.head;
+  if (head === null) return false;
+  return (
+    head.source_resource_type === source.type &&
+    head.source_version_id === source.version_id &&
+    head.edge_count === stored.edges.length &&
+    head.projection_digest === storedDigest
+  );
+}
+
+function buildComparison(
+  source: CanonicalSource,
+  stored: StoredProjection,
+  fresh: readonly ExplicitReference[]
+): ReferenceProjectionComparison {
+  const storedType = stored.head === null ? source.type : stored.head.source_resource_type;
+  const storedVersion = stored.head === null ? source.version_id : stored.head.source_version_id;
+  const storedDigest = digestProjection(storedType, storedVersion, stored.edges);
+  const freshDigest = digestProjection(source.type, source.version_id, fresh);
+  return {
+    equal:
+      stored.metadataMatches &&
+      projectionHeadMatches(source, stored, storedDigest) &&
+      storedDigest === freshDigest,
+    headPresent: stored.head !== null,
+    storedEdgeCount: stored.edges.length,
+    freshEdgeCount: fresh.length,
+    storedDigest,
+    freshDigest,
+    sourceVersionId: source.version_id,
+    storedSourceVersionId: stored.head === null ? null : stored.head.source_version_id
+  };
+}
+
 /** Replace every projected reference for the current canonical version. */
 export async function replaceReferenceEdgesTx(
   sql: TenantSql,
   resourceId: string
 ): Promise<Result<ReferenceProjectionSummary, ReferenceProjectionError>> {
-  const parsedId = resourceIdSchema.safeParse(resourceId);
-  if (!parsedId.success) {
-    return err({ code: "REFERENCE_INVALID_INPUT", message: "resourceId must be a UUID" });
-  }
-  const fetched = await fetchCanonical(sql, parsedId.data);
+  const fetched = await fetchCanonical(sql, resourceId);
   if (!fetched.ok) return fetched;
   const edges = extractExplicitReferences(fetched.data.content);
   const digest = digestProjection(fetched.data.type, fetched.data.version_id, edges);
 
   // Extraction and identity checks complete before the first DML statement.
   // From here, a database failure throws and the tenant transaction rolls back.
-  await sql`delete from fhir_reference_edges where source_resource_id = ${parsedId.data}`;
+  await sql`delete from fhir_reference_edges where source_resource_id = ${fetched.data.resourceId}`;
   await sql`
     delete from fhir_reference_projection_heads
-    where source_resource_id = ${parsedId.data}`;
+    where source_resource_id = ${fetched.data.resourceId}`;
   const practice = sql`(select safe_uuid(current_setting('app.current_practice_id', true)))`;
   for (const edge of edges) {
     await sql`
       insert into fhir_reference_edges
         (practice_id, source_resource_id, source_resource_type, source_version_id,
          json_path, target_resource_type, target_resource_id, target_version_id, edge_kind)
-      values (${practice}, ${parsedId.data}, ${fetched.data.type},
+      values (${practice}, ${fetched.data.resourceId}, ${fetched.data.type},
         ${fetched.data.version_id}::bigint, ${edge.jsonPath}, ${edge.targetResourceType},
         ${edge.targetResourceId}, ${edge.targetVersionId}, 'explicit')`;
   }
@@ -170,7 +213,7 @@ export async function replaceReferenceEdgesTx(
     insert into fhir_reference_projection_heads
       (practice_id, source_resource_id, source_resource_type, source_version_id,
        edge_count, projection_digest)
-    values (${practice}, ${parsedId.data}, ${fetched.data.type},
+    values (${practice}, ${fetched.data.resourceId}, ${fetched.data.type},
       ${fetched.data.version_id}::bigint, ${edges.length}, ${digest})`;
   return ok({
     edgeCount: edges.length,
@@ -187,37 +230,14 @@ export async function compareReferenceProjectionTx(
   sql: TenantSql,
   resourceId: string
 ): Promise<Result<ReferenceProjectionComparison, ReferenceProjectionError>> {
-  const parsedId = resourceIdSchema.safeParse(resourceId);
-  if (!parsedId.success) {
-    return err({ code: "REFERENCE_INVALID_INPUT", message: "resourceId must be a UUID" });
-  }
-  const fetched = await fetchCanonical(sql, parsedId.data);
+  const fetched = await fetchCanonical(sql, resourceId);
   if (!fetched.ok) return fetched;
   const fresh = extractExplicitReferences(fetched.data.content);
   const stored = await readStoredProjection(
     sql,
-    parsedId.data,
+    fetched.data.resourceId,
     fetched.data.type,
     fetched.data.version_id
   );
-  const storedSourceType = stored.head?.source_resource_type ?? fetched.data.type;
-  const storedSourceVersion = stored.head?.source_version_id ?? fetched.data.version_id;
-  const storedDigest = digestProjection(storedSourceType, storedSourceVersion, stored.edges);
-  const freshDigest = digestProjection(fetched.data.type, fetched.data.version_id, fresh);
-  const headMatches =
-    stored.head !== null &&
-    stored.head.source_resource_type === fetched.data.type &&
-    stored.head.source_version_id === fetched.data.version_id &&
-    stored.head.edge_count === stored.edges.length &&
-    stored.head.projection_digest === storedDigest;
-  return ok({
-    equal: stored.metadataMatches && headMatches && storedDigest === freshDigest,
-    headPresent: stored.head !== null,
-    storedEdgeCount: stored.edges.length,
-    freshEdgeCount: fresh.length,
-    storedDigest,
-    freshDigest,
-    sourceVersionId: fetched.data.version_id,
-    storedSourceVersionId: stored.head?.source_version_id ?? null
-  });
+  return ok(buildComparison(fetched.data, stored, fresh));
 }

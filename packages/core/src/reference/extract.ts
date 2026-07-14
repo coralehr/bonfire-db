@@ -1,6 +1,7 @@
 import type { JsonObject, JsonValue } from "../db/canonical-json.js";
 
-const RELATIVE_REFERENCE = /^(?<type>[A-Za-z][A-Za-z0-9]*)\/(?<id>[A-Za-z0-9\-.]{1,64})(?:\/_history\/(?<version>[A-Za-z0-9\-.]{1,64}))?$/;
+const RELATIVE_REFERENCE =
+  /^(?<type>[A-Za-z][A-Za-z0-9]*)\/(?<id>[A-Za-z0-9\-.]{1,64})(?:\/_history\/(?<version>[A-Za-z0-9\-.]{1,64}))?$/;
 
 export interface ExplicitReference {
   readonly jsonPath: string;
@@ -43,8 +44,10 @@ export function extractExplicitReferences(content: JsonObject): readonly Explici
   const output: ExplicitReference[] = [];
   visit(content, [], output);
   return output.sort((left, right) =>
-    [left.jsonPath, left.targetResourceType, left.targetResourceId].join("\u0000").localeCompare(
-      [right.jsonPath, right.targetResourceType, right.targetResourceId].join("\u0000")
-    )
+    [left.jsonPath, left.targetResourceType, left.targetResourceId]
+      .join("\u0000")
+      .localeCompare(
+        [right.jsonPath, right.targetResourceType, right.targetResourceId].join("\u0000")
+      )
   );
 }

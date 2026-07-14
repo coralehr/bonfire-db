@@ -23,6 +23,28 @@ registerRebuiltContext((c) => {
   ctx = c;
 });
 
+function syntheticObservation(id: string, patientId: string) {
+  return {
+    resourceType: "Observation",
+    id,
+    status: "final",
+    category: [
+      {
+        coding: [
+          {
+            system: "http://terminology.hl7.org/CodeSystem/observation-category",
+            code: "vital-signs"
+          }
+        ]
+      }
+    ],
+    code: { coding: [{ system: "http://loinc.org", code: "8480-6" }] },
+    subject: { reference: `Patient/${patientId}` },
+    effectiveDateTime: "2026-07-13T00:00:00Z",
+    valueQuantity: { value: 120, unit: "mmHg" }
+  };
+}
+
 describe("one write path: canonical + projections commit together", () => {
   test("a projected scribe write lands the canonical row, vd row and spidx rows atomically", async () => {
     const practice = randomUUID();
@@ -64,25 +86,7 @@ describe("one write path: canonical + projections commit together", () => {
     const practice = randomUUID();
     const id = randomUUID();
     const patientId = randomUUID();
-    const observation = {
-      resourceType: "Observation",
-      id,
-      status: "final",
-      category: [
-        {
-          coding: [
-            {
-              system: "http://terminology.hl7.org/CodeSystem/observation-category",
-              code: "vital-signs"
-            }
-          ]
-        }
-      ],
-      code: { coding: [{ system: "http://loinc.org", code: "8480-6" }] },
-      subject: { reference: `Patient/${patientId}` },
-      effectiveDateTime: "2026-07-13T00:00:00Z",
-      valueQuantity: { value: 120, unit: "mmHg" }
-    };
+    const observation = syntheticObservation(id, patientId);
     const result = await ctx.db.withTenant(practice, (sql) =>
       writeScribeResourceProjected(sql, observation, ctx.views)
     );
@@ -107,25 +111,7 @@ describe("one write path: canonical + projections commit together", () => {
     const id = randomUUID();
     const firstPatientId = randomUUID();
     const secondPatientId = randomUUID();
-    const observation = {
-      resourceType: "Observation",
-      id,
-      status: "final",
-      category: [
-        {
-          coding: [
-            {
-              system: "http://terminology.hl7.org/CodeSystem/observation-category",
-              code: "vital-signs"
-            }
-          ]
-        }
-      ],
-      code: { coding: [{ system: "http://loinc.org", code: "8480-6" }] },
-      subject: { reference: `Patient/${firstPatientId}` },
-      effectiveDateTime: "2026-07-13T00:00:00Z",
-      valueQuantity: { value: 120, unit: "mmHg" }
-    };
+    const observation = syntheticObservation(id, firstPatientId);
     const inserted = await ctx.db.withTenant(practice, (sql) =>
       writeScribeResourceProjected(sql, observation, ctx.views)
     );
@@ -168,25 +154,7 @@ describe("one write path: canonical + projections commit together", () => {
     const practice = randomUUID();
     const id = randomUUID();
     const patientId = randomUUID();
-    const observation = {
-      resourceType: "Observation",
-      id,
-      status: "final",
-      category: [
-        {
-          coding: [
-            {
-              system: "http://terminology.hl7.org/CodeSystem/observation-category",
-              code: "vital-signs"
-            }
-          ]
-        }
-      ],
-      code: { coding: [{ system: "http://loinc.org", code: "8480-6" }] },
-      subject: { reference: `Patient/${patientId}` },
-      effectiveDateTime: "2026-07-13T00:00:00Z",
-      valueQuantity: { value: 120, unit: "mmHg" }
-    };
+    const observation = syntheticObservation(id, patientId);
     const inserted = await ctx.db.withTenant(practice, (sql) =>
       writeScribeResourceProjected(sql, observation, ctx.views)
     );

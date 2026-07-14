@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
-  REFERENCE_PROFILES,
   isAllowedReferenceEdge,
+  REFERENCE_PROFILES,
   referenceProfile
 } from "./semantic-catalog.js";
 

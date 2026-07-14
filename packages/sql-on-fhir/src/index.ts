@@ -53,9 +53,9 @@ export {
   viewDefinitionSchema
 } from "./view-definition.js";
 export type {
+  ProjectedUpdateResult,
   ProjectedWriteError,
   ProjectedWriteResult,
-  ProjectedUpdateResult,
   ReferenceProjector,
   SearchProjector
 } from "./write-projected.js";

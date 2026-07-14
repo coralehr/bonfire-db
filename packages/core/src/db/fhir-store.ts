@@ -24,7 +24,7 @@ export const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
   ])
 );
 
-const fhirContentSchema: z.ZodType<JsonObject> = z.record(z.string(), jsonValueSchema);
+export const fhirContentSchema: z.ZodType<JsonObject> = z.record(z.string(), jsonValueSchema);
 
 const insertInputSchema = z.object({
   id: z.uuid(),

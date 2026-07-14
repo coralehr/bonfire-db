@@ -1,9 +1,10 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
+import type { JsonObject } from "../db/canonical-json.js";
 import { createSqlClient } from "../db/client.js";
 import { resolveDatabaseTarget } from "../db/env.js";
-import { connectTenantDb } from "../db/tenant.js";
 import { insertFhirResourceTx, updateFhirResourceTx } from "../db/fhir-store.js";
+import { connectTenantDb, type TenantSql } from "../db/tenant.js";
 import { compareReferenceProjectionTx, replaceReferenceEdgesTx } from "./projection.js";
 import { createReferenceGraphReader } from "./sql-reader.js";
 import { walkReferenceGraph } from "./walk.js";
@@ -16,6 +17,21 @@ afterAll(async () => {
   await rawApp.end({ timeout: 5 });
 });
 
+async function insertCanonical(
+  sql: TenantSql,
+  id: string,
+  type: string,
+  content: JsonObject
+): Promise<void> {
+  const result = await insertFhirResourceTx(sql, {
+    id,
+    type,
+    content,
+    rawPayload: JSON.stringify(content)
+  });
+  if (!result.ok) throw new Error(result.error.code);
+}
+
 describe("tenant-scoped explicit-reference projection", () => {
   test("parity fails for never-projected empty resources and unchanged-reference version bumps", async () => {
     const practiceId = randomUUID();
@@ -24,13 +40,7 @@ describe("tenant-scoped explicit-reference projection", () => {
     const observationId = randomUUID();
     const result = await db.withTenant(practiceId, async (sql) => {
       const patient = { resourceType: "Patient", id: patientId };
-      const insertedPatient = await insertFhirResourceTx(sql, {
-        id: patientId,
-        type: "Patient",
-        content: patient,
-        rawPayload: JSON.stringify(patient)
-      });
-      if (!insertedPatient.ok) throw new Error(insertedPatient.error.code);
+      await insertCanonical(sql, patientId, "Patient", patient);
       const absent = await compareReferenceProjectionTx(sql, patientId);
       if (!absent.ok) throw new Error(absent.error.code);
 
@@ -40,13 +50,7 @@ describe("tenant-scoped explicit-reference projection", () => {
         result: [{ reference: `Observation/${observationId}` }],
         status: "preliminary"
       };
-      const insertedReport = await insertFhirResourceTx(sql, {
-        id: reportId,
-        type: "DiagnosticReport",
-        content: report,
-        rawPayload: JSON.stringify(report)
-      });
-      if (!insertedReport.ok) throw new Error(insertedReport.error.code);
+      await insertCanonical(sql, reportId, "DiagnosticReport", report);
       const projected = await replaceReferenceEdgesTx(sql, reportId);
       if (!projected.ok) throw new Error(projected.error.code);
       const updated = await updateFhirResourceTx(sql, {
@@ -84,26 +88,14 @@ describe("tenant-scoped explicit-reference projection", () => {
     const specimenId = randomUUID();
     const result = await db.withTenant(practiceId, async (sql) => {
       const patient = { resourceType: "Patient", id: patientId };
-      const insertedPatient = await insertFhirResourceTx(sql, {
-        id: patientId,
-        type: "Patient",
-        content: patient,
-        rawPayload: JSON.stringify(patient)
-      });
-      if (!insertedPatient.ok) throw new Error(insertedPatient.error.code);
+      await insertCanonical(sql, patientId, "Patient", patient);
       const original = {
         resourceType: "DiagnosticReport",
         id: reportId,
         subject: { reference: `Patient/${patientId}` },
         result: [{ reference: `Observation/${oldObservationId}` }]
       };
-      const insertedReport = await insertFhirResourceTx(sql, {
-        id: reportId,
-        type: "DiagnosticReport",
-        content: original,
-        rawPayload: JSON.stringify(original)
-      });
-      if (!insertedReport.ok) throw new Error(insertedReport.error.code);
+      await insertCanonical(sql, reportId, "DiagnosticReport", original);
       const first = await replaceReferenceEdgesTx(sql, reportId);
       if (!first.ok) throw new Error(first.error.code);
       expect(first.data).toMatchObject({ edgeCount: 2, sourceVersionId: "1" });
@@ -175,13 +167,7 @@ describe("tenant-scoped explicit-reference projection", () => {
           }
         ]
       ] as const) {
-        const inserted = await insertFhirResourceTx(sql, {
-          id,
-          type,
-          content,
-          rawPayload: JSON.stringify(content)
-        });
-        if (!inserted.ok) throw new Error(inserted.error.code);
+        await insertCanonical(sql, id, type, content);
         const projected = await replaceReferenceEdgesTx(sql, id);
         if (!projected.ok) throw new Error(projected.error.code);
       }
@@ -220,13 +206,7 @@ describe("tenant-scoped explicit-reference projection", () => {
           id: sharedReportId,
           result: [{ reference: `Observation/${targetId}` }]
         };
-        const inserted = await insertFhirResourceTx(sql, {
-          id: sharedReportId,
-          type: "DiagnosticReport",
-          content,
-          rawPayload: JSON.stringify(content)
-        });
-        if (!inserted.ok) throw new Error(inserted.error.code);
+        await insertCanonical(sql, sharedReportId, "DiagnosticReport", content);
         const projected = await replaceReferenceEdgesTx(sql, sharedReportId);
         if (!projected.ok) throw new Error(projected.error.code);
       });

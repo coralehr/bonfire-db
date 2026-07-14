@@ -13,8 +13,7 @@ describe("explicit FHIR reference extraction", () => {
       ],
       specimen: [
         {
-          reference:
-            "Specimen/55555555-5555-4555-8555-555555555555/_history/7"
+          reference: "Specimen/55555555-5555-4555-8555-555555555555/_history/7"
         }
       ],
       note: [{ text: "Observation/not-a-reference-field" }]

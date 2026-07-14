@@ -63,7 +63,12 @@ export type {
   InsertFhirResourceInput,
   UpdateFhirResourceInput
 } from "./db/fhir-store.js";
-export { insertFhirResourceTx, jsonValueSchema, updateFhirResourceTx } from "./db/fhir-store.js";
+export {
+  fhirContentSchema,
+  insertFhirResourceTx,
+  jsonValueSchema,
+  updateFhirResourceTx
+} from "./db/fhir-store.js";
 export type { MigrateErrorCode } from "./db/migrate.js";
 export { runMigrations } from "./db/migrate.js";
 export type {
@@ -104,10 +109,6 @@ export type {
   SignedNote
 } from "./governance/types.js";
 export { GOVERNANCE_ROLES, GOVERNANCE_STATES, signedNoteSchema } from "./governance/types.js";
-export type { BonfireError, Result } from "./result.js";
-export { err, ok } from "./result.js";
-export type { ExplicitReference } from "./reference/extract.js";
-export { extractExplicitReferences } from "./reference/extract.js";
 export type {
   EvidenceCompileReceipt,
   EvidenceCompileRequest,
@@ -119,6 +120,8 @@ export {
   EVIDENCE_COMPILER_CONTRACT_VERSION,
   evidenceCompileRequestSchema
 } from "./reference/compiler-contract.js";
+export type { ExplicitReference } from "./reference/extract.js";
+export { extractExplicitReferences } from "./reference/extract.js";
 export type {
   ReferenceProjectionComparison,
   ReferenceProjectionErrorCode,
@@ -135,9 +138,9 @@ export type {
   ReferenceRule
 } from "./reference/semantic-catalog.js";
 export {
+  isAllowedReferenceEdge,
   REFERENCE_PROFILE_NAMES,
   REFERENCE_PROFILES,
-  isAllowedReferenceEdge,
   referenceProfile
 } from "./reference/semantic-catalog.js";
 export type {
@@ -157,6 +160,8 @@ export type {
 // compiler derives ABAC scope and purpose before retrieval. Only bounded
 // contract types and constants are public in this release.
 export { REFERENCE_TRAVERSAL_LIMITS } from "./reference/walk.js";
+export type { BonfireError, Result } from "./result.js";
+export { err, ok } from "./result.js";
 export type { DerivedScope, ScopeSubject } from "./search/derive-scope.js";
 export { deriveScope, isSearchableType, SEARCHABLE_TYPES } from "./search/derive-scope.js";
 export { DEV_MODEL_ID, devEmbedder, isZeroEmbedding } from "./search/dev-embedder.js";

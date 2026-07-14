@@ -1,6 +1,6 @@
 /** Tenant-RLS SQL adapter for the pure bounded reference walker. */
 import { z } from "zod";
-import { jsonValueSchema } from "../db/fhir-store.js";
+import { fhirContentSchema } from "../db/fhir-store.js";
 import type { TenantSql } from "../db/tenant.js";
 import {
   REFERENCE_TRAVERSAL_LIMITS,
@@ -24,7 +24,7 @@ const targetRowSchema = z.object({
   resource_id: z.string().min(1),
   version_id: z.string().min(1),
   last_updated: z.string().min(1),
-  content: z.record(z.string(), jsonValueSchema)
+  content: fhirContentSchema
 });
 
 function requestKey(request: ReferenceTargetRequest): string {
@@ -55,12 +55,7 @@ async function readEdgesTx(
   sourceKeys: readonly string[],
   maxRows: number
 ): Promise<ReferenceEdgePage> {
-  const bound = z
-    .number()
-    .int()
-    .min(1)
-    .max(REFERENCE_TRAVERSAL_LIMITS.edges)
-    .parse(maxRows);
+  const bound = z.number().int().min(1).max(REFERENCE_TRAVERSAL_LIMITS.edges).parse(maxRows);
   if (sourceKeys.length === 0) return { edges: [], truncated: false };
   const rows = await sql`
     select source_resource_type, source_resource_id::text as source_resource_id,
@@ -95,9 +90,7 @@ async function resolveTargetsTx(
   const currentKeys = requests
     .filter((request) => request.versionId === null)
     .map((request) => `${request.resourceType}/${request.resourceId}`);
-  const historyKeys = requests
-    .filter((request) => request.versionId !== null)
-    .map(requestKey);
+  const historyKeys = requests.filter((request) => request.versionId !== null).map(requestKey);
   const current =
     currentKeys.length === 0
       ? []
@@ -114,10 +107,11 @@ async function resolveTargetsTx(
             version_id::text as version_id, last_updated::text as last_updated, content
           from history
           where (type || '/' || id::text || '/' || version_id::text) = any(${historyKeys})`;
-  return [...parseReferenceTargets(current), ...parseReferenceTargets(history)].sort((left, right) =>
-    `${left.resourceType}/${left.resourceId}/${left.versionId}`.localeCompare(
-      `${right.resourceType}/${right.resourceId}/${right.versionId}`
-    )
+  return [...parseReferenceTargets(current), ...parseReferenceTargets(history)].sort(
+    (left, right) =>
+      `${left.resourceType}/${left.resourceId}/${left.versionId}`.localeCompare(
+        `${right.resourceType}/${right.resourceId}/${right.versionId}`
+      )
   );
 }
 

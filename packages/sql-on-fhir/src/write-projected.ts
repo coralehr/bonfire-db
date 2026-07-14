@@ -71,6 +71,12 @@ export type ReferenceProjector = (
   resourceId: string
 ) => Promise<Result<ReferenceProjectionSummary, BonfireError<ReferenceProjectionErrorCode>>>;
 
+function resolveViews(
+  views: readonly MaterializableView[] | undefined
+): Result<readonly MaterializableView[], ViewError> {
+  return views === undefined ? loadScribeViews() : ok(views);
+}
+
 /**
  * Write a scribe resource AND its projections inside the caller's withTenant
  * transaction. `views` defaults to the staged scribe ViewDefinitions; pass an
@@ -85,17 +91,11 @@ export async function writeScribeResourceProjected(
   projectSearch: SearchProjector = indexResourceTx,
   projectReferences: ReferenceProjector = replaceReferenceEdgesTx
 ): Promise<Result<ProjectedWriteResult, ProjectedWriteError>> {
-  let resolved: readonly MaterializableView[];
-  if (views === undefined) {
-    const loaded = loadScribeViews();
-    if (!loaded.ok) return loaded;
-    resolved = loaded.data;
-  } else {
-    resolved = views;
-  }
+  const resolved = resolveViews(views);
+  if (!resolved.ok) return resolved;
   const written = await writeScribeResource(sql, input);
   if (!written.ok) return written;
-  const projected = await upsertProjection(sql, written.data.record.id, resolved);
+  const projected = await upsertProjection(sql, written.data.record.id, resolved.data);
   if (!projected.ok) {
     // Canonical DML already ran — only a throw aborts the transaction.
     throw new Error(
@@ -134,17 +134,11 @@ export async function updateFhirResourceProjected(
   projectSearch: SearchProjector = indexResourceTx,
   projectReferences: ReferenceProjector = replaceReferenceEdgesTx
 ): Promise<Result<ProjectedUpdateResult, ProjectedWriteError>> {
-  let resolved: readonly MaterializableView[];
-  if (views === undefined) {
-    const loaded = loadScribeViews();
-    if (!loaded.ok) return loaded;
-    resolved = loaded.data;
-  } else {
-    resolved = views;
-  }
+  const resolved = resolveViews(views);
+  if (!resolved.ok) return resolved;
   const updated = await updateFhirResourceTx(sql, input);
   if (!updated.ok) return updated;
-  const projected = await upsertProjection(sql, updated.data.id, resolved);
+  const projected = await upsertProjection(sql, updated.data.id, resolved.data);
   if (!projected.ok) {
     throw new Error(
       `projection failed after canonical update: [${projected.error.code}] ${projected.error.message}`

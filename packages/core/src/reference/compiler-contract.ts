@@ -19,23 +19,15 @@ import {
   type ReferenceTraversalResult,
   type ResourceKey
 } from "./walk.js";
+import { referenceResourceKeySchema, referenceTraversalBoundsSchema } from "./walk-validation.js";
 
 export const EVIDENCE_COMPILER_CONTRACT_VERSION = "evidence-compiler/v1";
 
-const resourceKeySchema = z.object({
-  resourceType: z.string().regex(/^[A-Za-z][A-Za-z0-9]*$/),
-  resourceId: z.string().min(1).max(REFERENCE_TRAVERSAL_LIMITS.resourceIdLength)
-});
-
 export const evidenceCompileRequestSchema = z.object({
   contractVersion: z.literal(EVIDENCE_COMPILER_CONTRACT_VERSION),
-  plan: z.object({
+  plan: referenceTraversalBoundsSchema.extend({
     profile: z.enum(REFERENCE_PROFILE_NAMES),
-    roots: z.array(resourceKeySchema).min(1).max(REFERENCE_TRAVERSAL_LIMITS.roots),
-    maxDepth: z.number().int().min(1).max(REFERENCE_TRAVERSAL_LIMITS.depth),
-    maxTargets: z.number().int().min(1).max(REFERENCE_TRAVERSAL_LIMITS.targets),
-    maxEdges: z.number().int().min(1).max(REFERENCE_TRAVERSAL_LIMITS.edges),
-    maxCitations: z.number().int().min(1).max(REFERENCE_TRAVERSAL_LIMITS.citations)
+    roots: z.array(referenceResourceKeySchema).min(1).max(REFERENCE_TRAVERSAL_LIMITS.roots)
   }),
   principal: z.object({
     id: z.string().min(1),
