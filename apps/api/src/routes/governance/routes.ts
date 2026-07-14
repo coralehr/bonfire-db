@@ -85,7 +85,7 @@ function governanceHandler(deps: AuthDeps, call: GovernanceCall): RouteHandler {
       call(
         ctx.sql,
         {
-          id: `${ctx.identity.iss}#${ctx.identity.sub}`,
+          id: ctx.actorId,
           role: ctx.membership.role,
           practiceId: ctx.membership.practiceId
         },
@@ -95,7 +95,7 @@ function governanceHandler(deps: AuthDeps, call: GovernanceCall): RouteHandler {
   };
 }
 
-/** Fastify plugin factory over injected deps (BF-13 pattern; app wiring stays deferred). */
+/** Fastify plugin factory over the production-composed auth and tenant dependencies. */
 export function governanceRoutes(
   deps: AuthDeps,
   commit: GovernanceCommit = commitProjectedProposal

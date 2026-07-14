@@ -1,7 +1,7 @@
 /**
  * Fastify app factory. The api owns a small non-tenant postgres pool used ONLY
- * by the /health catalog probe (it connects as bonfire_app like everything
- * else); all tenant-scoped data access goes through @bonfire/core withTenant.
+ * by the /health and /ready catalog probes (it connects as bonfire_app like
+ * everything else); tenant-scoped access goes through @bonfire/core withTenant.
  */
 import { resolveDatabaseTarget } from "@bonfire/core";
 import type {
@@ -17,6 +17,9 @@ import { serializerCompiler, validatorCompiler } from "fastify-type-provider-zod
 import type { Sql } from "postgres";
 import postgres from "postgres";
 import { healthRoutes } from "./health.js";
+import type { AuthDeps } from "./middleware/auth-hook.js";
+import { clinicalRoutes } from "./routes/clinical/routes.js";
+import { governanceRoutes } from "./routes/governance/routes.js";
 
 const POOL_MAX = 4;
 const CONNECT_TIMEOUT_SECONDS = 5;
@@ -46,7 +49,12 @@ function createHealthSql(databaseUrl?: string): Sql {
  * `logger` enables request logging (the server entry turns it on).
  */
 export function buildApp(
-  options: { readonly databaseUrl?: string; readonly logger?: boolean } = {}
+  options: {
+    /** When present, the app owns and closes these production route dependencies. */
+    readonly authDeps?: AuthDeps;
+    readonly databaseUrl?: string;
+    readonly logger?: boolean;
+  } = {}
 ): FastifyInstance<
   RawServerDefault,
   RawRequestDefaultExpression,
@@ -62,8 +70,15 @@ export function buildApp(
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
   void app.register(healthRoutes, { sql });
+  if (options.authDeps !== undefined) {
+    void app.register(clinicalRoutes(options.authDeps));
+    void app.register(governanceRoutes(options.authDeps));
+  }
   app.addHook("onClose", async () => {
-    await sql.end({ timeout: SQL_END_TIMEOUT_SECONDS });
+    await Promise.all([
+      sql.end({ timeout: SQL_END_TIMEOUT_SECONDS }),
+      options.authDeps?.tenantDb.end() ?? Promise.resolve()
+    ]);
   });
   return app;
 }

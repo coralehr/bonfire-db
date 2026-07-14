@@ -52,7 +52,8 @@ mapping, and the transaction-local tenant context that makes multi-tenancy real.
 
 6. **Every authentication decision emits exactly one hash-chained audit row.**
    Success is audited on the RESOLVED practice's chain (`decision:"allow"`,
-   `actorId:"${iss}#${sub}"`). A failure has no tenant, so it is audited on a
+   `actorId:JSON.stringify([iss, sub])`, an injective tuple encoding). A failure
+   has no tenant, so it is audited on a
    reserved SYSTEM practice (`00000000-0000-4000-8000-000000000000`) with its own
    genesis-anchored chain (`decision:"deny"`, receipt `practiceId:"unknown"` which
    BF-05's mis-attribution guard whitelists). RLS keeps SYSTEM rows invisible to

@@ -16,6 +16,19 @@ import { z } from "zod";
 /** The positive algorithm allow-list; the token header's alg is never trusted. */
 const SUPPORTED_ALGORITHMS = ["RS256", "ES256", "EdDSA"] as const;
 const DEFAULT_CLOCK_TOLERANCE_SECONDS = 60;
+const MAX_CLOCK_TOLERANCE_SECONDS = 300;
+
+const httpsUrlSchema = z
+  .url()
+  .refine((value) => URL.canParse(value) && new URL(value).protocol === "https:", {
+    message: "OIDC endpoints must use HTTPS"
+  });
+
+const issuerUrlSchema = httpsUrlSchema.refine((value) => {
+  if (!URL.canParse(value)) return false;
+  const url = new URL(value);
+  return url.search === "" && url.hash === "";
+}, "OIDC issuer must not contain a query string or fragment");
 
 export type OidcConfigErrorCode = "OIDC_CONFIG_INVALID";
 
@@ -25,14 +38,15 @@ export type OidcConfigErrorCode = "OIDC_CONFIG_INVALID";
  * verifier that silently accepts tokens from an unintended issuer.
  */
 const oidcEnvSchema = z.object({
-  OIDC_ISSUER: z.url(),
-  OIDC_JWKS_URI: z.url(),
+  OIDC_ISSUER: issuerUrlSchema,
+  OIDC_JWKS_URI: httpsUrlSchema,
   OIDC_AUDIENCE: z.string().min(1),
   OIDC_FHIR_USER_CLAIM: z.string().min(1).default(DEFAULT_FHIR_USER_CLAIM),
   OIDC_CLOCK_TOLERANCE_SECONDS: z.coerce
     .number()
     .int()
     .nonnegative()
+    .max(MAX_CLOCK_TOLERANCE_SECONDS)
     .default(DEFAULT_CLOCK_TOLERANCE_SECONDS)
 });
 

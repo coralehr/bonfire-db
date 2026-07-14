@@ -8,27 +8,14 @@
  */
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
-import type { Role, TenantDb, Verifier } from "@bonfire/core";
-import {
-  commitProposal,
-  connectTenantDb,
-  createVerifier,
-  devDatabaseUrl,
-  signedNoteSchema,
-  writeScribeResource
-} from "@bonfire/core";
+import type { Role, TenantDb } from "@bonfire/core";
+import { authActorId, signedNoteSchema } from "@bonfire/core";
 import type { FastifyInstance } from "fastify";
-import fastify from "fastify";
-import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT } from "jose";
 import type { Sql } from "postgres";
-import postgres from "postgres";
 import { z } from "zod";
-import { governanceRoutes } from "./routes.js";
+import type { AuthenticatedAppHarness } from "../../testing/authenticated-app.test.js";
+import { createAuthenticatedAppHarness } from "../../testing/authenticated-app.test.js";
 
-/** Run-unique issuer: scopes every DB oracle to THIS run's identities. */
-const ISS = `https://idp.synthetic.test/bf09-${randomUUID()}`;
-const AUD = "bonfire-api";
-const KID = "bf09-governance-key";
 const DB_TIMEOUT_MS = 30_000;
 
 const proposalOkSchema = z.object({
@@ -41,51 +28,20 @@ const errBodySchema = z.object({ ok: z.literal(false), error: z.object({ code: z
 let tenantDb: TenantDb;
 let owner: Sql;
 let app: FastifyInstance;
-let signToken: (sub: string) => Promise<string>;
+let harness: AuthenticatedAppHarness;
 
 beforeAll(async () => {
-  const { privateKey, publicKey } = await generateKeyPair("RS256", { extractable: true });
-  const jwk = await exportJWK(publicKey);
-  const verifier: Verifier = createVerifier(
-    {
-      issuer: ISS,
-      jwksUri: `${ISS}/.well-known/jwks.json`,
-      audience: AUD,
-      algorithms: ["RS256"],
-      clockToleranceSeconds: 5
-    },
-    createLocalJWKSet({ keys: [{ ...jwk, kid: KID, alg: "RS256", use: "sig" }] })
-  );
-  signToken = (sub: string): Promise<string> =>
-    new SignJWT({})
-      .setProtectedHeader({ alg: "RS256", kid: KID })
-      .setIssuer(ISS)
-      .setAudience(AUD)
-      .setSubject(sub)
-      .setExpirationTime("1h")
-      .sign(privateKey);
-  tenantDb = connectTenantDb({ max: 2 });
-  owner = postgres(devDatabaseUrl("migrate"), { max: 1 });
-  app = fastify();
-  await app.register(
-    governanceRoutes({ verifier, tenantDb }, (sql, input) =>
-      commitProposal(sql, input, writeScribeResource)
-    )
-  );
-  await app.ready();
+  harness = await createAuthenticatedAppHarness({ issuerPrefix: "bf09" });
+  ({ app, tenantDb, owner } = harness);
 });
 
 afterAll(async () => {
-  await app.close();
-  await Promise.all([tenantDb.end(), owner.end()]);
+  await harness.close();
 });
 
 /** Seed one membership (owner-only write) and mint its Bearer token. */
 async function enroll(practiceId: string, role: Role): Promise<string> {
-  const sub = `human-${randomUUID()}`;
-  await owner`insert into membership (iss, sub, practice_id, role)
-    values (${ISS}, ${sub}, ${practiceId}, ${role})`;
-  return signToken(sub);
+  return harness.enroll(practiceId, role);
 }
 
 interface Posted {
@@ -148,9 +104,10 @@ async function auditTrail(practice: string): Promise<{ decision: string; resourc
 
 /** Owner-side (RLS-bypassing) governance row counts for THIS run's issuer. */
 async function issuerGovernanceRows(): Promise<number> {
+  const actorPrefix = authActorId({ iss: harness.issuer, sub: "" }).slice(0, -2);
   const [row] = await owner`
     select count(*)::int as n from governance_proposal
-    where proposer_actor_id like ${`${ISS}#%`}`;
+    where proposer_actor_id like ${`${actorPrefix}%`}`;
   return Number(row?.n ?? -1);
 }
 
@@ -171,8 +128,18 @@ describe("clinician full flow (propose -> approve -> commit)", () => {
       expect(committed.status).toBe(200);
       const note = signedOkSchema.parse(committed.body).data;
       expect(note.proposalId).toBe(proposalId);
-      expect(note.approverActorId.startsWith(`${ISS}#`)).toBe(true);
+      const actorPrefix = authActorId({ iss: harness.issuer, sub: "" }).slice(0, -2);
+      expect(note.approverActorId.startsWith(actorPrefix)).toBe(true);
       expect(note.resource.resourceType).toBe("Patient");
+      const projected = await owner`
+        select
+          (select count(*) from fhir_resources where practice_id = ${practice}
+            and id = ${note.resource.resourceId}) as canonical,
+          (select count(*) from vd_patient_demographics where practice_id = ${practice}
+            and id = ${note.resource.resourceId}) as demographics,
+          (select count(*) from search_doc where practice_id = ${practice}
+            and resource_id = ${note.resource.resourceId}) as search`;
+      expect(projected[0]).toEqual({ canonical: "1", demographics: "1", search: "1" });
     },
     DB_TIMEOUT_MS
   );

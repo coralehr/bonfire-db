@@ -13,8 +13,8 @@ import { SHA256_HEX_LENGTH } from "../audit/row-hash.js";
 /** The dev embedder's hashing dimension; the `vector(384)` column enforces it too. */
 export const EMBEDDING_DIM = 384;
 /** Bounds on the untrusted request (a huge query or topN is a DoS lever). */
-const MAX_QUERY_LEN = 2000;
-const MAX_TOP_N = 100;
+export const MAX_SEARCH_QUERY_LENGTH = 2000;
+export const MAX_SEARCH_TOP_N = 100;
 /** Default page size when the caller does not pin `topN`. */
 export const DEFAULT_TOP_N = 20;
 
@@ -53,10 +53,10 @@ const subjectSchema = z.object({
  * can never diverge from the transaction it is written under.
  */
 export const searchInputSchema = z.object({
-  query: z.string().min(1).max(MAX_QUERY_LEN),
+  query: z.string().min(1).max(MAX_SEARCH_QUERY_LENGTH),
   subject: subjectSchema,
   purposeOfUse: z.enum(PURPOSES_OF_USE),
-  topN: z.number().int().min(1).max(MAX_TOP_N).optional()
+  topN: z.number().int().min(1).max(MAX_SEARCH_TOP_N).optional()
 });
 
 export type SearchInput = z.infer<typeof searchInputSchema>;

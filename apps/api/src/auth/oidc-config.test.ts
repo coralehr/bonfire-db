@@ -61,6 +61,35 @@ describe("loadOidcConfig parses BYO-IdP settings from the environment", () => {
     const result = loadOidcConfig({ ...VALID_ENV, OIDC_ISSUER: "not-a-url" });
     expect(result.ok).toBe(false);
   });
+
+  test("plaintext HTTP issuer or JWKS endpoints fail closed", () => {
+    for (const env of [
+      { ...VALID_ENV, OIDC_ISSUER: "http://idp.synthetic.test/" },
+      { ...VALID_ENV, OIDC_JWKS_URI: "http://idp.synthetic.test/jwks.json" }
+    ]) {
+      const result = loadOidcConfig(env);
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.error.code).toBe("OIDC_CONFIG_INVALID");
+    }
+  });
+
+  test("issuer query strings and fragments fail closed", () => {
+    for (const issuer of [
+      "https://idp.synthetic.test/?tenant=other",
+      "https://idp.synthetic.test/#other"
+    ]) {
+      expect(loadOidcConfig({ ...VALID_ENV, OIDC_ISSUER: issuer }).ok).toBe(false);
+    }
+  });
+
+  test("clock tolerance is bounded to five minutes", () => {
+    const maximum = loadOidcConfig({ ...VALID_ENV, OIDC_CLOCK_TOLERANCE_SECONDS: "300" });
+    expect(maximum.ok).toBe(true);
+    if (maximum.ok) expect(maximum.data.clockToleranceSeconds).toBe(300);
+
+    const excessive = loadOidcConfig({ ...VALID_ENV, OIDC_CLOCK_TOLERANCE_SECONDS: "301" });
+    expect(excessive.ok).toBe(false);
+  });
 });
 
 describe("buildVerifier constructs a prod verifier with no network", () => {

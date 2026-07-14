@@ -8,7 +8,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
 import type { TenantDb, Verifier } from "@bonfire/core";
-import { connectTenantDb, err, SYSTEM_PRACTICE_ID } from "@bonfire/core";
+import { authActorId, connectTenantDb, err, SYSTEM_PRACTICE_ID } from "@bonfire/core";
 import { okVerifier, ownerClient, sessionFor, syntheticToken, TEST_ISS } from "../support.test.js";
 import { authenticate } from "./session.js";
 
@@ -52,7 +52,7 @@ describe("authenticate (U2: the only session constructor)", () => {
     expect(session.role).toBe("biller");
     expect(session.iss).toBe(TEST_ISS);
     expect(session.sub).toBe(sub);
-    expect(session.actorId).toBe(`${TEST_ISS}#${sub}`);
+    expect(session.actorId).toBe(authActorId({ iss: TEST_ISS, sub }));
   });
 
   test("verifier deny -> err AUTH_VERIFY_FAILED, never a session", async () => {
@@ -62,10 +62,10 @@ describe("authenticate (U2: the only session constructor)", () => {
   });
 
   test("authenticated but NO membership row -> err AUTH_NO_MEMBERSHIP + SYSTEM deny row", async () => {
-    // Unique sub -> unique actor_id (iss#sub), so the SYSTEM chain (shared across
+    // Unique sub -> unique actor_id tuple, so the SYSTEM chain (shared across
     // suites) can be keyed off actor_id, never a racy global count(*).
     const sub = `ghost-${randomUUID()}`;
-    const actorId = `${TEST_ISS}#${sub}`;
+    const actorId = authActorId({ iss: TEST_ISS, sub });
     const verifier = okVerifier({ iss: TEST_ISS, sub });
     const result = await authenticate({ db, verifier, token: syntheticToken() });
     expect(result.ok).toBe(false);

@@ -173,6 +173,32 @@ jobs:
           else
             bunx turbo run "${TASK}"
           fi
+      - name: Smoke protected routes in the production image
+        if: matrix.task == 'test'
+        run: |
+          bun -e '
+            const ready = await fetch("http://127.0.0.1:8080/ready");
+            const readyBody = await ready.json();
+            if (ready.status !== 200 || readyBody?.db !== "ready") {
+              throw new Error("production image is live but not schema-ready");
+            }
+            const urls = [
+              "/search",
+              "/context",
+              "/governance/proposals"
+            ];
+            for (const path of urls) {
+              const response = await fetch(`http://127.0.0.1:8080${path}`, {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: "{}"
+              });
+              const body = await response.json();
+              if (response.status !== 401 || body?.error?.code !== "UNAUTHENTICATED") {
+                throw new Error(`${path} did not expose the fail-closed production route`);
+              }
+            }
+          '
       # Synthetic-only tripwire as a PERMANENT blocking step (inside this
       # required check, so no branch-protection change): the scanner self-tests
       # every detector class (exit 2 if any fails to fire), then sweeps the

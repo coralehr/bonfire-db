@@ -9,7 +9,12 @@
  * context.
  */
 import type { ProposalRecord, SearchResponse } from "@bonfire/core";
-import { PURPOSES_OF_USE, scribeInputSchema } from "@bonfire/core";
+import {
+  MAX_SEARCH_QUERY_LENGTH,
+  MAX_SEARCH_TOP_N,
+  PURPOSES_OF_USE,
+  scribeInputSchema
+} from "@bonfire/core";
 import type { BonfireClient } from "@bonfire/sdk";
 import { z } from "zod";
 
@@ -19,10 +24,6 @@ import { z } from "zod";
  * reorder of PURPOSES_OF_USE fails to compile instead of silently repinning.
  */
 const TREATMENT_PURPOSE: "TREAT" = PURPOSES_OF_USE[0];
-
-/** Mirrors core's search bounds (core re-validates; this bounds the boundary). */
-const QUERY_MAX_CHARS = 2000;
-const TOP_N_MAX = 100;
 
 export type ToolName = "get_context" | "propose_resource" | "search_clinical";
 
@@ -99,8 +100,8 @@ function defineTool<Schema extends z.ZodType>(spec: {
 }
 
 const searchArgsSchema = z.strictObject({
-  query: z.string().min(1).max(QUERY_MAX_CHARS),
-  topN: z.number().int().min(1).max(TOP_N_MAX).optional()
+  query: z.string().min(1).max(MAX_SEARCH_QUERY_LENGTH),
+  topN: z.number().int().min(1).max(MAX_SEARCH_TOP_N).optional()
 });
 
 /**
