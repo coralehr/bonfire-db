@@ -20,10 +20,10 @@ import { appendAuditRowTx } from "../audit/audit-log.js";
 import type { TenantSql } from "../db/tenant.js";
 import { toJsonObject } from "../fhir/json.js";
 import { scribeInputSchema } from "../fhir/scribe-schemas.js";
-import type { Result } from "../result.js";
+import type { BonfireError, Result } from "../result.js";
 import { err, ok } from "../result.js";
 import type { WriteError } from "../write/errors.js";
-import { writeScribeResource } from "../write/write-resource.js";
+import type { WriteResult } from "../write/write-resource.js";
 import { decideGovernance, transition } from "./policy.js";
 import type {
   GovernanceActor,
@@ -59,6 +59,16 @@ interface AllowedAttempt {
   readonly receipt: PolicyReceipt;
   readonly actor: GovernanceActor;
 }
+
+/**
+ * Inverted write boundary for governance commit. Core owns the state machine,
+ * while a higher package composes every read-model projection that must share
+ * the canonical transaction.
+ */
+export type GovernanceCommitWriter<E extends BonfireError = WriteError> = (
+  sql: TenantSql,
+  input: unknown
+) => Promise<Result<WriteResult, E>>;
 
 /** The transaction's bound practice, read from the tenant GUC — never caller input. */
 async function boundPracticeId(sql: TenantSql): Promise<string> {
@@ -211,15 +221,15 @@ export async function proposeRecord(
  * authorize (deny → audited err), check the transition (illegal → typed err,
  * UNAUDITED, zero rows), then run the action-specific mutation.
  */
-async function advance<T>(
+async function advance<T, E extends BonfireError = WriteError>(
   sql: TenantSql,
   input: { readonly actor: unknown; readonly proposalId: string },
   action: "approve" | "commit",
   onAllowed: (
     allowed: AllowedAttempt,
     loaded: LoadedProposal
-  ) => Promise<Result<T, GovernanceError | WriteError>>
-): Promise<Result<T, GovernanceError | WriteError>> {
+  ) => Promise<Result<T, GovernanceError | E>>
+): Promise<Result<T, GovernanceError | E>> {
   if (!uuidSchema.safeParse(input.proposalId).success) return err(NOT_FOUND);
   const loaded = await loadProposal(sql, input.proposalId);
   if (loaded === null) return err(NOT_FOUND);
@@ -256,12 +266,13 @@ export function approveProposal(
  * passes through with zero audit rows (a failed attempt leaves no trace); a
  * throw (e.g. a duplicate resource id) rolls the whole transaction back.
  */
-export function commitProposal(
+export function commitProposal<E extends BonfireError>(
   sql: TenantSql,
-  input: { readonly actor: unknown; readonly proposalId: string }
-): Promise<Result<SignedNote, GovernanceError | WriteError>> {
+  input: { readonly actor: unknown; readonly proposalId: string },
+  writeResource: GovernanceCommitWriter<E>
+): Promise<Result<SignedNote, GovernanceError | E>> {
   return advance(sql, input, "commit", async ({ receipt, actor }, loaded) => {
-    const written = await writeScribeResource(sql, loaded.resource);
+    const written = await writeResource(sql, loaded.resource);
     if (!written.ok) return written;
     const approveEvent = loaded.approveEvent;
     if (approveEvent === undefined) throw new Error("commit allowed without an approve event");

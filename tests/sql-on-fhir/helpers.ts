@@ -23,6 +23,7 @@ import type {
 import {
   loadScribeViews,
   orderedDumpHash,
+  parseMaterializableView,
   planTable,
   rebuildProjections,
   upsertProjection
@@ -79,6 +80,34 @@ export function registerRebuiltContext(assign: (ctx: TestContext) => void): void
   afterAll(async () => {
     if (ctx !== undefined) await closeContext(ctx);
   });
+}
+
+export function syntheticPatientScribe(id: string, family = "Projected"): Record<string, unknown> {
+  return {
+    resourceType: "Patient",
+    id,
+    identifier: [{ system: "https://example.org/synthetic-mrn", value: `MRN-${id.slice(0, 8)}` }],
+    name: [{ family, given: ["Synthetic"] }],
+    gender: "female"
+  };
+}
+
+export function hostilePatientNameView(name: string): MaterializableView {
+  const view = parseMaterializableView({
+    name,
+    resource: "Patient",
+    status: "active",
+    select: [
+      {
+        column: [
+          { name: "id", path: "getResourceKey()", type: "id" },
+          { name: "family_name", path: "name.family", type: "string" }
+        ]
+      }
+    ]
+  });
+  if (!view.ok) throw new Error(view.error.message);
+  return view.data;
 }
 
 function scribeViews(): MaterializableView[] {
