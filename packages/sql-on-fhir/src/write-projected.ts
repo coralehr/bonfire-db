@@ -15,14 +15,25 @@
  */
 import type {
   BonfireError,
+  FhirResourceRecord,
+  FhirStoreErrorCode,
   IndexErrorCode,
   IndexSummary,
+  ReferenceProjectionErrorCode,
+  ReferenceProjectionSummary,
   Result,
   TenantSql,
+  UpdateFhirResourceInput,
   WriteError,
   WriteResult
 } from "@bonfire/core";
-import { indexResourceTx, ok, writeScribeResource } from "@bonfire/core";
+import {
+  indexResourceTx,
+  ok,
+  replaceReferenceEdgesTx,
+  updateFhirResourceTx,
+  writeScribeResource
+} from "@bonfire/core";
 import type { ProjectionError, ViewError } from "./errors.js";
 import type { UpsertSummary } from "./materialize/upsert.js";
 import { upsertProjection } from "./materialize/upsert.js";
@@ -31,6 +42,14 @@ import type { MaterializableView } from "./view-definition.js";
 
 export interface ProjectedWriteResult extends WriteResult {
   readonly projection: UpsertSummary;
+  readonly references: ReferenceProjectionSummary;
+  readonly search: IndexSummary;
+}
+
+export interface ProjectedUpdateResult {
+  readonly record: FhirResourceRecord;
+  readonly projection: UpsertSummary;
+  readonly references: ReferenceProjectionSummary;
   readonly search: IndexSummary;
 }
 
@@ -38,12 +57,19 @@ export type ProjectedWriteError =
   | WriteError
   | ProjectionError
   | ViewError
+  | BonfireError<FhirStoreErrorCode>
+  | BonfireError<ReferenceProjectionErrorCode>
   | BonfireError<IndexErrorCode>;
 
 export type SearchProjector = (
   sql: TenantSql,
   resourceId: string
 ) => Promise<Result<IndexSummary, BonfireError<IndexErrorCode>>>;
+
+export type ReferenceProjector = (
+  sql: TenantSql,
+  resourceId: string
+) => Promise<Result<ReferenceProjectionSummary, BonfireError<ReferenceProjectionErrorCode>>>;
 
 /**
  * Write a scribe resource AND its projections inside the caller's withTenant
@@ -56,7 +82,8 @@ export async function writeScribeResourceProjected(
   sql: TenantSql,
   input: unknown,
   views?: readonly MaterializableView[],
-  projectSearch: SearchProjector = indexResourceTx
+  projectSearch: SearchProjector = indexResourceTx,
+  projectReferences: ReferenceProjector = replaceReferenceEdgesTx
 ): Promise<Result<ProjectedWriteResult, ProjectedWriteError>> {
   let resolved: readonly MaterializableView[];
   if (views === undefined) {
@@ -75,11 +102,70 @@ export async function writeScribeResourceProjected(
       `projection failed after canonical write: [${projected.error.code}] ${projected.error.message}`
     );
   }
+  const referenced = await projectReferences(sql, written.data.record.id);
+  if (!referenced.ok) {
+    throw new Error(
+      `reference projection failed after canonical write: [${referenced.error.code}] ${referenced.error.message}`
+    );
+  }
   const indexed = await projectSearch(sql, written.data.record.id);
   if (!indexed.ok) {
     throw new Error(
       `search projection failed after canonical write: [${indexed.error.code}] ${indexed.error.message}`
     );
   }
-  return ok({ ...written.data, projection: projected.data, search: indexed.data });
+  return ok({
+    ...written.data,
+    projection: projected.data,
+    references: referenced.data,
+    search: indexed.data
+  });
+}
+
+/**
+ * Update canonical FHIR and replace every derived projection in the same
+ * tenant transaction. Any post-canonical projection failure throws so the
+ * version append and every read model roll back together.
+ */
+export async function updateFhirResourceProjected(
+  sql: TenantSql,
+  input: UpdateFhirResourceInput,
+  views?: readonly MaterializableView[],
+  projectSearch: SearchProjector = indexResourceTx,
+  projectReferences: ReferenceProjector = replaceReferenceEdgesTx
+): Promise<Result<ProjectedUpdateResult, ProjectedWriteError>> {
+  let resolved: readonly MaterializableView[];
+  if (views === undefined) {
+    const loaded = loadScribeViews();
+    if (!loaded.ok) return loaded;
+    resolved = loaded.data;
+  } else {
+    resolved = views;
+  }
+  const updated = await updateFhirResourceTx(sql, input);
+  if (!updated.ok) return updated;
+  const projected = await upsertProjection(sql, updated.data.id, resolved);
+  if (!projected.ok) {
+    throw new Error(
+      `projection failed after canonical update: [${projected.error.code}] ${projected.error.message}`
+    );
+  }
+  const referenced = await projectReferences(sql, updated.data.id);
+  if (!referenced.ok) {
+    throw new Error(
+      `reference projection failed after canonical update: [${referenced.error.code}] ${referenced.error.message}`
+    );
+  }
+  const indexed = await projectSearch(sql, updated.data.id);
+  if (!indexed.ok) {
+    throw new Error(
+      `search projection failed after canonical update: [${indexed.error.code}] ${indexed.error.message}`
+    );
+  }
+  return ok({
+    record: updated.data,
+    projection: projected.data,
+    references: referenced.data,
+    search: indexed.data
+  });
 }
