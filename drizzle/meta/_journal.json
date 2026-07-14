@@ -92,6 +92,20 @@
       "when": 1752624000000,
       "tag": "0012_governance",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1752710400000,
+      "tag": "0013_reference_graph",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1752796800000,
+      "tag": "0014_reference_projection_heads",
+      "breakpoints": true
     }
   ]
 }

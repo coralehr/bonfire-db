@@ -53,8 +53,13 @@ export {
   viewDefinitionSchema
 } from "./view-definition.js";
 export type {
+  ProjectedUpdateResult,
   ProjectedWriteError,
   ProjectedWriteResult,
+  ReferenceProjector,
   SearchProjector
 } from "./write-projected.js";
-export { writeScribeResourceProjected } from "./write-projected.js";
+export {
+  updateFhirResourceProjected,
+  writeScribeResourceProjected
+} from "./write-projected.js";

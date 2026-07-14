@@ -63,7 +63,12 @@ export type {
   InsertFhirResourceInput,
   UpdateFhirResourceInput
 } from "./db/fhir-store.js";
-export { insertFhirResourceTx, jsonValueSchema, updateFhirResourceTx } from "./db/fhir-store.js";
+export {
+  fhirContentSchema,
+  insertFhirResourceTx,
+  jsonValueSchema,
+  updateFhirResourceTx
+} from "./db/fhir-store.js";
 export type { MigrateErrorCode } from "./db/migrate.js";
 export { runMigrations } from "./db/migrate.js";
 export type {
@@ -104,6 +109,57 @@ export type {
   SignedNote
 } from "./governance/types.js";
 export { GOVERNANCE_ROLES, GOVERNANCE_STATES, signedNoteSchema } from "./governance/types.js";
+export type {
+  EvidenceCompileReceipt,
+  EvidenceCompileRequest,
+  EvidenceCompileResult,
+  EvidenceCompiler,
+  EvidencePacketResource
+} from "./reference/compiler-contract.js";
+export {
+  EVIDENCE_COMPILER_CONTRACT_VERSION,
+  evidenceCompileRequestSchema
+} from "./reference/compiler-contract.js";
+export type { ExplicitReference } from "./reference/extract.js";
+export { extractExplicitReferences } from "./reference/extract.js";
+export type {
+  ReferenceProjectionComparison,
+  ReferenceProjectionErrorCode,
+  ReferenceProjectionSummary
+} from "./reference/projection.js";
+export {
+  compareReferenceProjectionTx,
+  replaceReferenceEdgesTx
+} from "./reference/projection.js";
+export type {
+  ReferenceEvidenceStatus,
+  ReferenceProfile,
+  ReferenceProfileName,
+  ReferenceRule
+} from "./reference/semantic-catalog.js";
+export {
+  isAllowedReferenceEdge,
+  REFERENCE_PROFILE_NAMES,
+  REFERENCE_PROFILES,
+  referenceProfile
+} from "./reference/semantic-catalog.js";
+export type {
+  ReferenceEdge,
+  ReferenceEdgePage,
+  ReferenceGraphReader,
+  ReferencePathCitation,
+  ReferencePathStatus,
+  ReferencePathStep,
+  ReferenceTarget,
+  ReferenceTargetRequest,
+  ReferenceTraversalOptions,
+  ReferenceTraversalResult,
+  ResourceKey
+} from "./reference/walk.js";
+// The executable SQL reader and walker remain internal until the governed
+// compiler derives ABAC scope and purpose before retrieval. Only bounded
+// contract types and constants are public in this release.
+export { REFERENCE_TRAVERSAL_LIMITS } from "./reference/walk.js";
 export type { BonfireError, Result } from "./result.js";
 export { err, ok } from "./result.js";
 export type { DerivedScope, ScopeSubject } from "./search/derive-scope.js";
