@@ -35,11 +35,7 @@ function edge(
   };
 }
 
-function target(
-  resourceType: string,
-  resourceId: string,
-  versionId: string = "1"
-): ReferenceTarget {
+function target(resourceType: string, resourceId: string, versionId = "1"): ReferenceTarget {
   return {
     resourceType,
     resourceId,
