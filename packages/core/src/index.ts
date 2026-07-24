@@ -31,6 +31,7 @@ export type { AuthAuditResult, AuthFailure } from "./auth/auth-audit.js";
 export {
   auditAuthFailure,
   auditAuthSuccess,
+  authActorId,
   buildAuthReceipt,
   SYSTEM_PRACTICE_ID
 } from "./auth/auth-audit.js";
@@ -176,7 +177,13 @@ export type {
   SearchInput,
   SearchResponse
 } from "./search/schemas.js";
-export { EMBEDDING_DIM, searchInputSchema, searchResponseSchema } from "./search/schemas.js";
+export {
+  EMBEDDING_DIM,
+  MAX_SEARCH_QUERY_LENGTH,
+  MAX_SEARCH_TOP_N,
+  searchInputSchema,
+  searchResponseSchema
+} from "./search/schemas.js";
 export type { SearchErrorCode } from "./search/search-clinical.js";
 export { searchClinical } from "./search/search-clinical.js";
 export type { TerminologyConceptLookup } from "./terminology/bundled-pack-validator.js";

@@ -17,7 +17,12 @@ import { devDatabaseUrl, resolveDatabaseTarget } from "../db/env.js";
 import type { Membership, TenantSql } from "../db/tenant.js";
 import { createTenantDb } from "../db/tenant.js";
 import type { AuthFailure } from "./auth-audit.js";
-import { auditAuthFailure, auditAuthSuccess, SYSTEM_PRACTICE_ID } from "./auth-audit.js";
+import {
+  auditAuthFailure,
+  auditAuthSuccess,
+  authActorId,
+  SYSTEM_PRACTICE_ID
+} from "./auth-audit.js";
 
 const ISS = "https://idp.synthetic.test/";
 const CLOCK = (): string => "2026-07-06T12:34:56.789Z";
@@ -128,7 +133,7 @@ describe("claims-not-trusted: scope is the membership row, resolved server-side"
 
 describe("auth success audit: one allow row on the resolved practice's chain", () => {
   test(
-    "exactly one allow row, actor ${iss}#${sub}, chain verifies",
+    "exactly one allow row with an injective issuer/subject actor id; chain verifies",
     async () => {
       const practiceId = randomUUID();
       const sub = randomUUID();
@@ -140,7 +145,7 @@ describe("auth success audit: one allow row on the resolved practice's chain", (
           select actor_id, decision from audit_log order by seq asc`;
       });
       expect(rows.length).toBe(1);
-      expect(rows[0]?.actor_id).toBe(`${ISS}#${sub}`);
+      expect(rows[0]?.actor_id).toBe(authActorId({ iss: ISS, sub }));
       expect(rows[0]?.decision).toBe("allow");
       const report = await inTenant(practiceId, (sql) => verifyAuditChainTx(sql));
       expect(report.ok).toBe(true);
@@ -166,7 +171,7 @@ describe("auth failure audit: one deny row on the SYSTEM chain", () => {
     async () => {
       const sub = randomUUID();
       const row = await oneSystemDeny({ kind: "no-membership", identity: { iss: ISS, sub } });
-      expect(row.actor_id).toBe(`${ISS}#${sub}`);
+      expect(row.actor_id).toBe(authActorId({ iss: ISS, sub }));
       expect(row.decision).toBe("deny");
       expect(row.reason).toBe("auth: no membership");
       // The SYSTEM chain is anchored at genesis and stays valid as it grows.
@@ -181,6 +186,12 @@ describe("auth failure audit: one deny row on the SYSTEM chain", () => {
     },
     DB_TIMEOUT_MS
   );
+
+  test("actor identity serialization cannot collide at issuer/subject delimiters", () => {
+    expect(authActorId({ iss: "https://idp.test/a#", sub: "b" })).not.toBe(
+      authActorId({ iss: "https://idp.test/a", sub: "#b" })
+    );
+  });
 });
 
 describe("SYSTEM chain isolation + membership trust anchor", () => {

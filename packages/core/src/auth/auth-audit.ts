@@ -49,13 +49,15 @@ export const SYSTEM_PRACTICE_ID = "00000000-0000-4000-8000-000000000000";
 const AUTH_RESOURCE_TYPE = "Authentication";
 const AUTH_REASON_VERIFIED = "auth: verified";
 const AUTH_REASON_NO_MEMBERSHIP = "auth: no membership";
+const AUTH_REASON_MEMBERSHIP_LOOKUP_FAILED = "auth: membership lookup failed";
 const UNKNOWN_PRACTICE = "unknown";
 const UNVERIFIED_ACTOR = "unverified";
 
 /** Why an authentication failed: a verification error OR a missing membership. */
 export type AuthFailure =
   | { readonly kind: "verify"; readonly code: AuthErrorCode }
-  | { readonly kind: "no-membership"; readonly identity: VerifiedIdentity };
+  | { readonly kind: "no-membership"; readonly identity: VerifiedIdentity }
+  | { readonly kind: "membership-lookup-failed"; readonly identity: VerifiedIdentity };
 
 /** The Result an audit helper returns: the persisted row_hash, or a typed tx error. */
 export type AuthAuditResult = Result<
@@ -63,9 +65,9 @@ export type AuthAuditResult = Result<
   BonfireError<WithTenantErrorCode>
 >;
 
-/** The stable actor identity recorded on an audit row: `${iss}#${sub}`. */
-function actorIdOf(identity: VerifiedIdentity): string {
-  return `${identity.iss}#${identity.sub}`;
+/** Collision-free serialization of the issuer/subject tuple used in audit rows. */
+export function authActorId(identity: Pick<VerifiedIdentity, "iss" | "sub">): string {
+  return JSON.stringify([identity.iss, identity.sub]);
 }
 
 interface AuthReceiptFields {
@@ -103,9 +105,17 @@ function failureReceipt(failure: AuthFailure, timestamp: string): PolicyReceipt 
     case "no-membership":
       return buildAuthReceipt({
         decision: "deny",
-        actorId: actorIdOf(failure.identity),
+        actorId: authActorId(failure.identity),
         practiceId: UNKNOWN_PRACTICE,
         reason: AUTH_REASON_NO_MEMBERSHIP,
+        timestamp
+      });
+    case "membership-lookup-failed":
+      return buildAuthReceipt({
+        decision: "deny",
+        actorId: authActorId(failure.identity),
+        practiceId: UNKNOWN_PRACTICE,
+        reason: AUTH_REASON_MEMBERSHIP_LOOKUP_FAILED,
         timestamp
       });
   }
@@ -134,7 +144,7 @@ export function auditAuthSuccess(
 ): Promise<AuthAuditResult> {
   const receipt = buildAuthReceipt({
     decision: "allow",
-    actorId: actorIdOf(identity),
+    actorId: authActorId(identity),
     practiceId: membership.practiceId,
     reason: AUTH_REASON_VERIFIED,
     timestamp: now()

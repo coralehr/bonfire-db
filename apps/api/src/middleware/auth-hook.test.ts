@@ -1,7 +1,7 @@
 /**
- * TRACER D — the injectable auth boundary over a REAL local Fastify listener
- * (a test-constructed app; app.ts/server.ts are NOT edited — production wiring
- * is deferred, see ADR 0003). The verifier is `createVerifier` fed a LOCAL JWKS
+ * TRACER D — the injectable auth boundary over a REAL local Fastify listener.
+ * Production composition is covered separately by app and route integration
+ * tests. The verifier is `createVerifier` fed a LOCAL JWKS
  * (no network); the TenantDb is a max:1 pool so request B provably reuses the
  * physical connection request A just released.
  *

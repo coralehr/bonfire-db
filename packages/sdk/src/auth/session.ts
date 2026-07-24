@@ -22,7 +22,14 @@ import type {
   Verifier,
   VerifyTokenConfig
 } from "@bonfire/core";
-import { auditAuthFailure, auditAuthSuccess, createVerifier, err, ok } from "@bonfire/core";
+import {
+  auditAuthFailure,
+  auditAuthSuccess,
+  authActorId,
+  createVerifier,
+  err,
+  ok
+} from "@bonfire/core";
 
 /** Stable codes for every way authentication can fail. Each one is a deny. */
 export type AuthenticateErrorCode =
@@ -79,7 +86,7 @@ class BonfireSession {
 
   /** The audited actor identity, composed exactly like core's auth audit rows. */
   get actorId(): string {
-    return `${this.iss}#${this.sub}`;
+    return authActorId(this);
   }
 }
 
@@ -124,7 +131,7 @@ export async function authenticate(
   const identity = verified.data;
   const membership = await deps.db.resolveMembership(identity.iss, identity.sub);
   if (!membership.ok) {
-    const failure: AuthFailure = { kind: "no-membership", identity };
+    const failure: AuthFailure = { kind: "membership-lookup-failed", identity };
     return denyAudited(
       deps.db,
       failure,

@@ -5,8 +5,10 @@
  * via onClose) with an unref'd escape-hatch timer so a wedged close can never
  * keep the process alive past 8s.
  */
+import { connectTenantDb } from "@bonfire/core";
 import { z } from "zod";
 import { buildApp } from "./app.js";
+import { buildVerifier } from "./auth/verifier.js";
 
 const DEFAULT_PORT = 8080;
 const MAX_TCP_PORT = 65535;
@@ -19,7 +21,16 @@ function resolvePort(): number {
   return parsed.success ? parsed.data : DEFAULT_PORT;
 }
 
-const app = buildApp({ logger: true });
+const verifier = buildVerifier();
+if (!verifier.ok) {
+  process.stderr.write(`[${verifier.error.code}] ${verifier.error.message}\n`);
+  process.exit(1);
+}
+
+const app = buildApp({
+  logger: true,
+  authDeps: { verifier: verifier.data, tenantDb: connectTenantDb() }
+});
 
 function shutdown(signal: NodeJS.Signals): void {
   app.log.info({ signal }, "shutting down");

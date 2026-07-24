@@ -3,7 +3,7 @@
  * audit-bypass).
  *
  * Every authentication decision writes exactly one append-only hash-chained
- * audit row carrying the actor identity (iss#sub), the resolved practice_id (or
+ * audit row carrying the serialized issuer/subject tuple, the resolved practice_id (or
  * none), and the decision:
  *   success -> exactly one `allow` row on the RESOLVED practice's chain
  *   failure -> exactly one `deny` row on the reserved SYSTEM practice's chain
@@ -71,7 +71,7 @@ try {
   if (
     sRow.decision !== "allow" ||
     sRow.practice_id !== practice ||
-    sRow.actor_id !== `${issuer}#${sub}` ||
+    sRow.actor_id !== JSON.stringify([issuer, sub]) ||
     sRow.resource_type !== AUTH_RESOURCE_TYPE
   ) {
     fail(EVAL_ID, `success row wrong: ${JSON.stringify(sRow)}`);
@@ -108,7 +108,7 @@ try {
 
   pass(
     EVAL_ID,
-    "success=1 allow (resolved practice, iss#sub); failure=1 deny (SYSTEM, unverified); SYSTEM invisible to tenant"
+    "success=1 allow (resolved practice, issuer/subject tuple); failure=1 deny (SYSTEM, unverified); SYSTEM invisible to tenant"
   );
 } finally {
   await owner.end({ timeout: 5 });

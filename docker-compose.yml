@@ -57,6 +57,12 @@ services:
       DB_NAME: ${POSTGRES_DB:-bonfire}
       DB_PASSWORD: ${APP_DB_PASSWORD:-bonfire-dev-only-app-pw}
       PORT: "8080"
+      # Synthetic defaults preserve zero-key boot. They configure a real,
+      # fail-closed remote-JWKS verifier; no network occurs until a token is
+      # presented, and these reserved endpoints can never authenticate one.
+      OIDC_ISSUER: ${OIDC_ISSUER:-https://idp.synthetic.invalid}
+      OIDC_JWKS_URI: ${OIDC_JWKS_URI:-https://idp.synthetic.invalid/.well-known/jwks.json}
+      OIDC_AUDIENCE: ${OIDC_AUDIENCE:-bonfire-api}
     depends_on:
       db:
         condition: service_healthy

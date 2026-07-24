@@ -12,9 +12,8 @@
  *      throwing handler rolls back only its own tx — the authentication record
  *      survives (auth is not conditional on the request succeeding).
  *
- * It is shipped as an injectable function (verifier + tenantDb passed in), NOT
- * wired into the live server here — production wiring of app.ts/server.ts is
- * deferred (see ADR 0003). Tests construct a local Fastify app around it.
+ * It stays injectable for no-network tests, while app.ts/server.ts compose the
+ * production verifier and tenant DB around this same boundary.
  */
 import type {
   AuthErrorCode,
@@ -25,10 +24,9 @@ import type {
   VerifiedIdentity,
   Verifier
 } from "@bonfire/core";
-import { auditAuthFailure, auditAuthSuccess } from "@bonfire/core";
+import { auditAuthFailure, auditAuthSuccess, authActorId } from "@bonfire/core";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
-const HTTP_OK = 200;
 const HTTP_UNAUTHORIZED = 401;
 const HTTP_FORBIDDEN = 403;
 const HTTP_INTERNAL_ERROR = 500;
@@ -43,6 +41,7 @@ export interface AuthDeps {
 /** The tenant-scoped context handed to an authenticated handler (internal:
  *  reached only through the exported AuthenticatedHandler signature). */
 interface AuthenticatedContext {
+  readonly actorId: string;
   readonly identity: VerifiedIdentity;
   readonly membership: Membership;
   readonly sql: TenantSql;
@@ -99,13 +98,13 @@ async function runWithTenant<T>(
     return;
   }
   const outcome = await deps.tenantDb.withTenant(membership.practiceId, (sql) =>
-    handler({ identity, membership, sql })
+    handler({ actorId: authActorId(identity), identity, membership, sql })
   );
   if (!outcome.ok) {
     sendError(reply, HTTP_INTERNAL_ERROR, "HANDLER_FAILED");
     return;
   }
-  void reply.code(HTTP_OK).send(outcome.data);
+  void reply.send(outcome.data);
 }
 
 /**
@@ -132,7 +131,12 @@ export async function runAuthenticated<T>(
   }
   const identity = verified.data;
   const membership = await deps.tenantDb.resolveMembership(identity.iss, identity.sub);
-  if (!membership.ok || membership.data === null) {
+  if (!membership.ok) {
+    request.log.error({ code: membership.error.code }, "auth: membership lookup failed");
+    const failure: AuthFailure = { kind: "membership-lookup-failed", identity };
+    return denyAudited(reply, deps, HTTP_INTERNAL_ERROR, "AUTH_MEMBERSHIP_LOOKUP_FAILED", failure);
+  }
+  if (membership.data === null) {
     const failure: AuthFailure = { kind: "no-membership", identity };
     return denyAudited(reply, deps, HTTP_FORBIDDEN, "FORBIDDEN", failure);
   }
