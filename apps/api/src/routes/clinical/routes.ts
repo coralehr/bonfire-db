@@ -44,6 +44,14 @@ function malformedRead() {
   return err({ code: "SEARCH_INVALID_INPUT" as const, message: "search request is malformed" });
 }
 
+function forbiddenRead(reply: FastifyReply) {
+  void reply.code(HTTP_FORBIDDEN);
+  return err({
+    code: "CLINICAL_READ_FORBIDDEN" as const,
+    message: "clinical read is not authorized"
+  });
+}
+
 function parseRead(request: FastifyRequest): ClinicalRead | undefined {
   const parsed = clinicalReadSchema.safeParse(request.body);
   return parsed.success ? parsed.data : undefined;
@@ -55,6 +63,18 @@ type ClinicalCall = (
   input: ClinicalRead,
   reply: FastifyReply
 ) => Promise<unknown>;
+
+async function searchAuthorized(
+  sql: TenantSql,
+  subject: Subject,
+  input: ClinicalRead,
+  reply: FastifyReply
+) {
+  const searched = await searchClinical(sql, { ...input, subject });
+  if (!searched.ok) return searched;
+  if (searched.data.policyReceipt.decision !== "allow") return forbiddenRead(reply);
+  return searched;
+}
 
 function clinicalHandler(deps: AuthDeps, call: ClinicalCall) {
   return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
@@ -74,20 +94,15 @@ export function clinicalRoutes(deps: AuthDeps): (app: FastifyInstance) => Promis
   return (app: FastifyInstance): Promise<void> => {
     app.post(
       "/search",
-      clinicalHandler(deps, (sql, subject, input) => searchClinical(sql, { ...input, subject }))
+      clinicalHandler(deps, (sql, subject, input, reply) =>
+        searchAuthorized(sql, subject, input, reply)
+      )
     );
     app.post(
       "/context",
       clinicalHandler(deps, async (sql, subject, input, reply) => {
-        const searched = await searchClinical(sql, { ...input, subject });
+        const searched = await searchAuthorized(sql, subject, input, reply);
         if (!searched.ok) return searched;
-        if (searched.data.policyReceipt.decision !== "allow") {
-          void reply.code(HTTP_FORBIDDEN);
-          return err({
-            code: "CONTEXT_FORBIDDEN" as const,
-            message: "context request is not authorized"
-          });
-        }
         return buildCcp(sql, {
           response: searched.data,
           subject,

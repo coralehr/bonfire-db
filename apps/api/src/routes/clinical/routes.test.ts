@@ -140,29 +140,26 @@ describe("authenticated clinical read surface", () => {
       const token = await enroll(practice, "biller");
       const resourceId = await seedObservation(practice, QUERY);
 
-      const searched = await post(token, "/search", {
-        query: QUERY,
-        purposeOfUse: "TREAT"
-      });
-      expect(searched.statusCode).toBe(200);
-      const searchBody: unknown = searched.json();
-      expect(searchBody).toMatchObject({ ok: true });
-      const searchResult = okSearchSchema.parse(searchBody).data;
-      expect(searchResult.results).toEqual([]);
-      expect(searchResult.policyReceipt.decision).toBe("deny");
-      expect(JSON.stringify(searchResult)).not.toContain(resourceId);
-
-      const contextualized = await post(token, "/context", {
-        query: QUERY,
-        purposeOfUse: "TREAT"
-      });
-      expect(contextualized.statusCode).toBe(403);
-      const contextBody: unknown = contextualized.json();
-      expect(contextBody).toEqual({
-        ok: false,
-        error: { code: "CONTEXT_FORBIDDEN", message: "context request is not authorized" }
-      });
-      expect(JSON.stringify(contextBody)).not.toContain(resourceId);
+      const deniedBodies: unknown[] = [];
+      for (const url of ["/search", "/context"] as const) {
+        const response = await post(token, url, {
+          query: QUERY,
+          purposeOfUse: "TREAT"
+        });
+        expect(response.statusCode).toBe(403);
+        const body: unknown = response.json();
+        expect(body).toEqual({
+          ok: false,
+          error: {
+            code: "CLINICAL_READ_FORBIDDEN",
+            message: "clinical read is not authorized"
+          }
+        });
+        expect(JSON.stringify(body)).not.toContain(resourceId);
+        expect(JSON.stringify(body)).not.toContain("policyReceipt");
+        deniedBodies.push(body);
+      }
+      expect(deniedBodies[0]).toEqual(deniedBodies[1]);
 
       const [audit] = await owner`
         select count(*)::int as denials from audit_log
